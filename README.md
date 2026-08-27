@@ -29,7 +29,8 @@ src/weatherbot/
   cycle.py         the 20-minute loop body (runs once, exits)
   cli.py           entrypoints
 scripts/           backtest.py, review.py (nightly LLM review), check_no_secrets.py
-ops/               launchd plists + install.sh
+ops/               macOS: launchd plists + install.sh + run_cycle.sh
+                   Windows: install.ps1 + run_cycle.ps1 + run_review.ps1
 prompts/           nightly review prompt
 ```
 
@@ -65,6 +66,30 @@ Then:
    chat id, email addresses, NWS User-Agent contact).
 2. Create a healthchecks.io check: period 20 min, grace 30 min. Two missed
    cycles ⇒ alert. Paste the ping URL into `config.yaml`.
+
+## Install on Windows
+
+Prereqs: Python 3.11+ and [uv](https://docs.astral.sh/uv/) on PATH (for the
+nightly review, also the `claude` CLI).
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ops\install.ps1
+```
+
+Creates `%LOCALAPPDATA%\weatherbot\logs`, copies `.env.example` to
+`%USERPROFILE%\.weatherbot.env` and locks its NTFS ACL to your user (the
+Windows equivalent of chmod 600 — `run_cycle.ps1` refuses to start if
+anyone else is granted access), syncs the environment, and registers two
+Task Scheduler jobs: `weatherbot-cycle` (at logon + every 20 minutes) and
+`weatherbot-review` (daily 06:00). It then prints the manual steps: fill in
+the key file/config, `powercfg` sleep settings (elevated), the BIOS
+"Restore on AC Power Loss" option, auto-login or "run whether user is
+logged on or not", and the healthchecks.io check.
+
+Everything else — commands, DB, halt behavior, going live — is identical to
+macOS; the wrappers only differ in how the schedule and key-file
+protection are enforced. Timezone data comes from the `tzdata` package,
+installed automatically on Windows.
 
 ## How a cycle works
 
@@ -130,9 +155,11 @@ Live order placement requires ALL of:
    does not.
 2. `TRADING_MODE=live` in `~/.weatherbot.env`.
 3. The cycle invoked as `weatherbot cycle --i-understand-this-is-live`
-   (edit `ops/run_cycle.sh` to add the flag).
+   (edit `ops/run_cycle.sh` — or `ops/run_cycle.ps1` on Windows — to add
+   the flag).
 4. `POLYMARKET_PRIVATE_KEY` and `POLYMARKET_PROXY_ADDRESS` set in the key
-   file (chmod 600 — the wrapper refuses to run otherwise).
+   file (chmod 600 on macOS, owner-only NTFS ACL on Windows — the wrapper
+   refuses to run otherwise).
 
 Anything missing ⇒ the cycle refuses loudly and fails closed. The private
 key is registered with the log redactor before any client is constructed

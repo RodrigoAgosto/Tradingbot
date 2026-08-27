@@ -81,6 +81,28 @@ def test_live_refused_without_client_or_key(conn, monkeypatch):
         get_executor(conn, Settings(mode="live"), live_ack=True)
 
 
+def test_key_file_permissions_enforced_posix(monkeypatch, tmp_path):
+    import os
+
+    import pytest as _pytest
+
+    if os.name == "nt":
+        _pytest.skip("POSIX permission bits are not meaningful on Windows")
+
+    from weatherbot.config import KeyFileError, load_private_key
+
+    key_file = tmp_path / "key.env"
+    key_file.write_text("x")
+    key_file.chmod(0o644)  # group/other readable -> refused
+    monkeypatch.setenv("POLYMARKET_KEY_FILE", str(key_file))
+    monkeypatch.setenv("POLYMARKET_PRIVATE_KEY", "deadbeef" * 8)
+    with pytest.raises(KeyFileError, match="must be 600"):
+        load_private_key()
+
+    key_file.chmod(0o600)
+    assert load_private_key() == "deadbeef" * 8
+
+
 def test_trading_mode_env_fail_closed(monkeypatch, tmp_path):
     from weatherbot.config import load_settings
 

@@ -131,11 +131,15 @@ def load_private_key() -> str:
         p = Path(key_file)
         if not p.exists():
             raise KeyFileError(f"POLYMARKET_KEY_FILE does not exist: {key_file}")
-        perms = stat.S_IMODE(p.stat().st_mode)
-        if perms & 0o077:
-            raise KeyFileError(
-                f"key file {key_file} permissions are {oct(perms)}; must be 600"
-            )
+        if os.name != "nt":
+            perms = stat.S_IMODE(p.stat().st_mode)
+            if perms & 0o077:
+                raise KeyFileError(
+                    f"key file {key_file} permissions are {oct(perms)}; must be 600"
+                )
+        # On Windows POSIX permission bits are meaningless; the launcher
+        # (ops/run_cycle.ps1) verifies the file's NTFS ACL is owner-only
+        # before this process starts.
 
     key = os.environ.get("POLYMARKET_PRIVATE_KEY", "").strip()
     if not key:

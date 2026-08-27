@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -28,8 +29,13 @@ log = logging.getLogger("review")
 
 def run_review() -> str:
     prompt = (REPO / "prompts" / "nightly_review.md").read_text()
+    # shutil.which resolves claude.cmd/.exe on Windows, where a bare
+    # subprocess name lookup would fail.
+    claude_bin = shutil.which("claude")
+    if not claude_bin:
+        raise RuntimeError("claude CLI not found on PATH")
     cmd = [
-        "claude",
+        claude_bin,
         "-p", prompt,
         "--output-format", "json",
         "--allowedTools", "Read,Bash(sqlite3:*)",
