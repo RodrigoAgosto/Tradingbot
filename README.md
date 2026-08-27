@@ -39,11 +39,19 @@ prompts/           nightly review prompt
 ```bash
 uv sync
 uv run weatherbot init-db
+uv run weatherbot doctor              # verify every prerequisite (see below)
 uv run weatherbot cycle --dry-run     # full cycle vs live data, zero DB writes
 uv run weatherbot cycle               # real paper cycle (writes to weatherbot.db)
 uv run weatherbot status
 uv run pytest
 ```
+
+`weatherbot doctor` checks everything the schedule depends on and prints the
+exact fix for anything missing: it really sends a test Telegram message and
+test email, really pings your healthchecks.io URL, and verifies the
+Polymarket/Open-Meteo/NWS APIs, the key file permissions, the claude CLI,
+and the halt state. Run it after the installer and again after filling in
+config until everything is PASS.
 
 `--dry-run` prints a decision table with every market evaluated, the model
 fair probability, the executable price for the intended size, the edge, and

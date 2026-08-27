@@ -103,6 +103,12 @@ def cmd_clear_halt(args) -> int:
     return 0
 
 
+def cmd_doctor(args) -> int:
+    from weatherbot.doctor import run_doctor
+
+    return run_doctor(load_settings(args.config))
+
+
 def cmd_init_db(args) -> int:
     settings = load_settings(args.config)
     conn = db.connect(settings.db_path)
@@ -133,6 +139,10 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("clear-halt", help="clear a halt (operator only)").set_defaults(func=cmd_clear_halt)
     sub.add_parser("init-db", help="create/migrate the database").set_defaults(func=cmd_init_db)
+    sub.add_parser(
+        "doctor",
+        help="verify every prerequisite (sends test alerts, pings heartbeat, checks APIs)",
+    ).set_defaults(func=cmd_doctor)
 
     args = parser.parse_args(argv)
     try:
