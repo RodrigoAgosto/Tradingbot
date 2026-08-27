@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: no-secrets
+        name: block key material from commits
+        entry: python3 scripts/check_no_secrets.py
+        language: system
+        pass_filenames: false
+        always_run: true

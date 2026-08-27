@@ -1,0 +1,62 @@
+# weatherbot configuration.
+#
+# Secrets NEVER go in this file. They live in the key env file (see
+# .env.example and README "Secrets"). Anything here is safe to commit.
+#
+# Risk caps in `risk:` are also hard-coded as ceilings in src/weatherbot/risk.py.
+# Raising a number here beyond the code ceiling has no effect — that is
+# deliberate.
+
+db_path: "weatherbot.db"
+
+strategy:
+  min_edge: 0.08            # minimum |fair - executable| to enter
+  max_edge: 0.40            # sanity gate: bigger edges mean our data is wrong,
+                            # unless the observation already settled the market
+  min_confidence: 0.6       # minimum model confidence to enter
+  max_lead_days: 3          # never trade markets resolving further out than this
+  max_slippage: 0.02        # max (avg fill - best quote) walking the book
+  min_volume_24h_usd: 5000  # skip illiquid markets
+  kelly_multiplier: 0.25    # fractional Kelly
+  exit_edge: 0.10           # early exit when edge flips against us by this much
+
+risk:
+  max_position_frac: 0.05        # max single position, fraction of bankroll
+  max_total_exposure_frac: 0.40  # max total open cost, fraction of bankroll
+  max_open_positions: 8
+  max_city_exposure_frac: 0.15   # max open cost per city, fraction of bankroll
+  max_positions_per_cycle: 2
+  daily_loss_frac: 0.15          # kill switch vs starting-of-day bankroll
+  bankroll_floor_usd: 25.0       # absolute halt floor
+
+staleness:
+  forecast_max_age_hours: 4.0
+  market_max_age_seconds: 60.0
+
+forecast:
+  cache_minutes: 30
+  ensemble_models: ["gfs025", "ecmwf_ifs025"]
+  # NWS requires a descriptive User-Agent with a contact. Put YOUR contact here.
+  nws_user_agent: "weatherbot/0.1 (contact: set-your-contact-here)"
+
+paper:
+  starting_bankroll: 1000.0
+
+heartbeat:
+  # healthchecks.io ping URL. Create a check with a 20-minute schedule and a
+  # 30-minute grace period, then paste its ping URL here.
+  url: null
+  timeout_seconds: 10
+
+alerts:
+  telegram:
+    enabled: true
+    # bot token comes from TELEGRAM_BOT_TOKEN in the key env file
+    chat_id: null
+  email:
+    enabled: true
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    # SMTP username/password come from SMTP_USERNAME / SMTP_PASSWORD env vars
+    from_addr: null
+    to_addr: null

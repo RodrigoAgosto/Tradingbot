@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# databases
+*.db
+*.db-wal
+*.db-shm
+
+# secrets — never commit these
+.env
+.env.*
+!.env.example
+*.key
+*.pem
