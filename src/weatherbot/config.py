@@ -118,6 +118,29 @@ class KeyFileError(RuntimeError):
     pass
 
 
+def load_key_env_file() -> Path | None:
+    """Load KEY=VALUE lines from the key env file into os.environ.
+
+    The launchd/Task Scheduler wrappers source this file before starting
+    Python, but interactive runs (`weatherbot doctor`, `weatherbot cycle`
+    by hand) don't go through a wrapper — so the CLI loads it here too.
+    Existing environment variables are never overridden. Returns the path
+    loaded, or None when no key file exists.
+    """
+    path = Path(os.environ.get("WEATHERBOT_KEY_FILE") or Path.home() / ".weatherbot.env")
+    if not path.exists():
+        return None
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        name, value = name.strip(), value.strip()
+        if name and value:
+            os.environ.setdefault(name, value)
+    return path
+
+
 def load_private_key() -> str:
     """Return the trading private key from the environment.
 

@@ -18,7 +18,7 @@ import logging
 import sys
 
 from weatherbot import db, logutil
-from weatherbot.config import load_settings
+from weatherbot.config import load_key_env_file, load_settings
 
 log = logging.getLogger("weatherbot")
 
@@ -118,6 +118,9 @@ def cmd_init_db(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Load secrets from the key file BEFORE logging setup, so they are
+    # registered with the redactor from the very first log line.
+    load_key_env_file()
     logutil.setup_logging()
 
     parser = argparse.ArgumentParser(prog="weatherbot")

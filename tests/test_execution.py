@@ -103,6 +103,27 @@ def test_key_file_permissions_enforced_posix(monkeypatch, tmp_path):
     assert load_private_key() == "deadbeef" * 8
 
 
+def test_key_env_file_loaded_without_overriding(monkeypatch, tmp_path):
+    from weatherbot.config import load_key_env_file
+
+    key_file = tmp_path / "key.env"
+    key_file.write_text(
+        "# comment\n"
+        "TELEGRAM_BOT_TOKEN=from-file\n"
+        "TRADING_MODE=live\n"
+        "EMPTY_VALUE=\n"
+    )
+    monkeypatch.setenv("WEATHERBOT_KEY_FILE", str(key_file))
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.setenv("TRADING_MODE", "paper")  # pre-set env must win
+    assert load_key_env_file() == key_file
+    import os
+
+    assert os.environ["TELEGRAM_BOT_TOKEN"] == "from-file"
+    assert os.environ["TRADING_MODE"] == "paper"
+    assert "EMPTY_VALUE" not in os.environ
+
+
 def test_trading_mode_env_fail_closed(monkeypatch, tmp_path):
     from weatherbot.config import load_settings
 

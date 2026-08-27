@@ -22,7 +22,7 @@ sys.path.insert(0, str(REPO / "src"))
 
 from weatherbot import logutil  # noqa: E402
 from weatherbot.alerts import send_email, send_telegram  # noqa: E402
-from weatherbot.config import load_settings  # noqa: E402
+from weatherbot.config import load_key_env_file, load_settings  # noqa: E402
 
 log = logging.getLogger("review")
 
@@ -60,6 +60,7 @@ def extract_telegram_summary(text: str) -> str:
 
 
 def main() -> int:
+    load_key_env_file()
     logutil.setup_logging()
     settings = load_settings(REPO / "config.yaml")
     try:
