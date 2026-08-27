@@ -43,9 +43,8 @@ paper:
   starting_bankroll: 1000.0
 
 heartbeat:
-  # healthchecks.io ping URL. Create a check with a 20-minute schedule and a
-  # 30-minute grace period, then paste its ping URL here.
-  url: null
+  # healthchecks.io ping URL (check: 20-minute schedule, 30-minute grace)
+  url: "https://hc-ping.com/e1c3b9b9-6330-47ec-836e-60911f62baad"
   timeout_seconds: 10
 
 alerts:
