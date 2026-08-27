@@ -53,9 +53,9 @@ alerts:
     # bot token comes from TELEGRAM_BOT_TOKEN in the key env file
     chat_id: "5598264424"
   email:
-    # off until a Gmail App Password is created; flip to true and fill the
-    # addresses + SMTP_USERNAME/SMTP_PASSWORD in the key file to enable
-    enabled: false
+    # requires SMTP_USERNAME + SMTP_PASSWORD (a Gmail App Password) in the
+    # key file; until those are set, email sends are skipped harmlessly
+    enabled: true
     smtp_host: "smtp.gmail.com"
     smtp_port: 587
     from_addr: "r.agosto3123@gmail.com"
