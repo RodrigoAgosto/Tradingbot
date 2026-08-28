@@ -101,6 +101,7 @@ def _reduce_daily(
 
 
 def _fetch_model(client: httpx.Client, station: Station, model: str, forecast_days: int) -> dict:
+    unit = "celsius" if station.unit == "C" else "fahrenheit"
     resp = client.get(
         ENSEMBLE_BASE,
         params={
@@ -110,7 +111,7 @@ def _fetch_model(client: httpx.Client, station: Station, model: str, forecast_da
             "models": model,
             "forecast_days": forecast_days,
             "timezone": station.timezone,
-            "temperature_unit": "fahrenheit",
+            "temperature_unit": unit,
         },
         timeout=45,
     )
@@ -138,7 +139,7 @@ def get_ensemble(
     oldest_fetch: datetime | None = None
 
     for model in models:
-        key = f"openmeteo:{station.station_id}:{model}"
+        key = f"openmeteo:{station.station_id}:{model}:{station.unit}"
         cached = db.cache_get(conn, key, cache_minutes * 60)
         if cached is None:
             try:

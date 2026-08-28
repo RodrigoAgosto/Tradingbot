@@ -3,11 +3,15 @@
 A market that cannot be mapped to one of these stations is skipped —
 unknown city means skip, always.
 
-Phase 2 (NOT yet enabled): Taipei and Hong Kong. Those markets resolve
-against non-NWS sources (CWA / HKO), so they need a new `source` adapter for
-observations before they can be traded. The `source` field exists so they
-slot in without restructuring; do not add them here until that adapter and
-its tests exist.
+Two observation adapters:
+  * "nws": api.weather.gov, US (and some Canadian) stations, deg F display.
+  * "awc": aviationweather.gov global METARs, deg C display — the same
+    reports the weather.gov timeseries resolution pages show for
+    international stations.
+
+NOT supported: Taipei and Hong Kong. Their Polymarket rules carry no
+weather.gov timeseries URL — they resolve directly against CWA / HKO — so
+the parser skips them (no_station_in_resolution_rules), correctly.
 """
 
 from __future__ import annotations
@@ -23,7 +27,8 @@ class Station:
     lat: float
     lon: float
     timezone: str
-    source: str  # observation source adapter: "nws" (only supported value today)
+    source: str  # observation adapter: "nws" (US/Canada) or "awc" (global METAR)
+    unit: str = "F"  # unit the resolution source displays: "F" or "C"
 
 
 # Verified against live Polymarket resolution rules (2026-08): NYC markets
@@ -111,6 +116,145 @@ STATIONS: dict[str, Station] = {
         timezone="America/Chicago",
         source="nws",
     ),
+    "KSEA": Station(
+        station_id="KSEA",
+        city="Seattle",
+        name="Seattle-Tacoma Intl Airport",
+        lat=47.4489,
+        lon=-122.3094,
+        timezone="America/Los_Angeles",
+        source="nws",
+    ),
+    "KBKF": Station(
+        station_id="KBKF",
+        city="Denver",
+        name="Buckley Space Force Base",
+        lat=39.7017,
+        lon=-104.7517,
+        timezone="America/Denver",
+        source="nws",
+    ),
+    # --- international (deg C markets, global METAR observations) ---
+    "SAEZ": Station(
+        station_id="SAEZ",
+        city="Buenos Aires",
+        name="Buenos Aires Ezeiza Intl Airport",
+        lat=-34.8222,
+        lon=-58.5358,
+        timezone="America/Argentina/Buenos_Aires",
+        source="awc",
+        unit="C",
+    ),
+    "SBGR": Station(
+        station_id="SBGR",
+        city="Sao Paulo",
+        name="Sao Paulo Guarulhos Intl Airport",
+        lat=-23.4356,
+        lon=-46.4731,
+        timezone="America/Sao_Paulo",
+        source="awc",
+        unit="C",
+    ),
+    "EGLC": Station(
+        station_id="EGLC",
+        city="London",
+        name="London City Airport",
+        lat=51.5053,
+        lon=0.0553,
+        timezone="Europe/London",
+        source="awc",
+        unit="C",
+    ),
+    "LFPB": Station(
+        station_id="LFPB",
+        city="Paris",
+        name="Paris Le Bourget Airport",
+        lat=48.9694,
+        lon=2.4414,
+        timezone="Europe/Paris",
+        source="awc",
+        unit="C",
+    ),
+    "EDDM": Station(
+        station_id="EDDM",
+        city="Munich",
+        name="Munich Airport",
+        lat=48.3538,
+        lon=11.7861,
+        timezone="Europe/Berlin",
+        source="awc",
+        unit="C",
+    ),
+    "LTAC": Station(
+        station_id="LTAC",
+        city="Ankara",
+        name="Ankara Esenboga Airport",
+        lat=40.1281,
+        lon=32.9951,
+        timezone="Europe/Istanbul",
+        source="awc",
+        unit="C",
+    ),
+    "LLBG": Station(
+        station_id="LLBG",
+        city="Tel Aviv",
+        name="Tel Aviv Ben Gurion Airport",
+        lat=32.0114,
+        lon=34.8867,
+        timezone="Asia/Jerusalem",
+        source="awc",
+        unit="C",
+    ),
+    "ZBAA": Station(
+        station_id="ZBAA",
+        city="Beijing",
+        name="Beijing Capital Intl Airport",
+        lat=40.0801,
+        lon=116.5846,
+        timezone="Asia/Shanghai",
+        source="awc",
+        unit="C",
+    ),
+    "WMKK": Station(
+        station_id="WMKK",
+        city="Kuala Lumpur",
+        name="Kuala Lumpur Intl Airport",
+        lat=2.7456,
+        lon=101.7099,
+        timezone="Asia/Kuala_Lumpur",
+        source="awc",
+        unit="C",
+    ),
+    "RJTT": Station(
+        station_id="RJTT",
+        city="Tokyo",
+        name="Tokyo Haneda Airport",
+        lat=35.5533,
+        lon=139.7811,
+        timezone="Asia/Tokyo",
+        source="awc",
+        unit="C",
+    ),
+    "RKSI": Station(
+        station_id="RKSI",
+        city="Seoul",
+        name="Seoul Incheon Intl Airport",
+        lat=37.4692,
+        lon=126.4505,
+        timezone="Asia/Seoul",
+        source="awc",
+        unit="C",
+    ),
+    "NZWN": Station(
+        station_id="NZWN",
+        city="Wellington",
+        name="Wellington Intl Airport",
+        lat=-41.3272,
+        lon=174.8053,
+        timezone="Pacific/Auckland",
+        source="awc",
+        unit="C",
+    ),
 }
 
 # Lowercase CITY alias -> station id. Used only for the question/rules
@@ -128,6 +272,21 @@ CITY_ALIASES: dict[str, str] = {
     "dallas": "KDAL",
     "san francisco": "KSFO",
     "austin": "KAUS",
+    "seattle": "KSEA",
+    "denver": "KBKF",
+    "buenos aires": "SAEZ",
+    "sao paulo": "SBGR",
+    "são paulo": "SBGR",
+    "london": "EGLC",
+    "paris": "LFPB",
+    "munich": "EDDM",
+    "ankara": "LTAC",
+    "tel aviv": "LLBG",
+    "beijing": "ZBAA",
+    "kuala lumpur": "WMKK",
+    "tokyo": "RJTT",
+    "seoul": "RKSI",
+    "wellington": "NZWN",
 }
 
 # Station-SPECIFIC names. These may identify the station from the resolution

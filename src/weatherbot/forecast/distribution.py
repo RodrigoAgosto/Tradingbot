@@ -194,6 +194,10 @@ def fair_value(
     if claim.metric not in ("high_temp", "low_temp"):
         return None
 
+    # All tuned magnitudes below (sigma floor, agreement scale, anchor cap)
+    # are expressed in deg F; deg C values are 5/9 the size.
+    uscale = 1.0 if claim.unit == "F" else 5.0 / 9.0
+
     same_day = lead_days <= 0 and observed_value is not None
 
     # 1. hard settlement by observation — checked before anything else
@@ -217,8 +221,9 @@ def fair_value(
         and member_nows is not None
         and len(member_nows) == len(members)
     ):
+        cap = MAX_ANCHOR_SHIFT * uscale
         shifts = [
-            max(-MAX_ANCHOR_SHIFT, min(MAX_ANCHOR_SHIFT, observed_current - now))
+            max(-cap, min(cap, observed_current - now))
             for now in member_nows
         ]
         members = [m + s for m, s in zip(members, shifts)]
@@ -232,7 +237,7 @@ def fair_value(
     center = raw_mean - calibration.bias
     adjusted = [center + (m - raw_mean) * inflation for m in members]
     adj_std = statistics.pstdev(adjusted)
-    sigma = max(0.6, 0.25 * adj_std)
+    sigma = max(0.6 * uscale, 0.25 * adj_std)
 
     # 3. event probability
     if same_day:
@@ -245,7 +250,7 @@ def fair_value(
     p = min(P_CEIL, max(P_FLOOR, p))
 
     # 4. confidence: ensemble agreement x lead time x sample size
-    agreement = 1.0 / (1.0 + adj_std / 4.0)
+    agreement = 1.0 / (1.0 + adj_std / (4.0 * uscale))
     lead_factor = min(1.0, max(0.2, 1.0 - 0.12 * max(0.0, lead_days - 0.5)))
     size_factor = min(1.0, len(members) / 30.0)
     confidence = agreement * lead_factor * size_factor

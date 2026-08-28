@@ -25,7 +25,7 @@ from weatherbot.alerts import notify_urgent
 from weatherbot.config import Settings
 from weatherbot.execution.router import get_executor
 from weatherbot.execution.types import CloseIntent, OrderIntent
-from weatherbot.forecast import distribution, nws, openmeteo
+from weatherbot.forecast import awc, distribution, nws, openmeteo
 from weatherbot.forecast.stations import STATIONS, get_station
 from weatherbot.markets import clob, gamma
 from weatherbot.markets.parser import WeatherClaim, parse_market
@@ -96,12 +96,19 @@ def _record(conn, cycle_id: int, d: Decision) -> None:
     )
 
 
+def _fetch_obs(client, station, day, user_agent) -> nws.ObservedDay | None:
+    """Observation fetch dispatched by the station's source adapter."""
+    if station.source == "awc":
+        return awc.fetch_day_observations(client, station, day, user_agent)
+    return nws.fetch_day_observations(client, station, day, user_agent)
+
+
 def _update_observations(conn, client, station, cfg, today_local: date) -> nws.ObservedDay | None:
     """Fetch today's running obs; also finalize yesterday for calibration."""
     yesterday = today_local - timedelta(days=1)
     row = db.get_observation(conn, station.station_id, yesterday.isoformat())
     if row is None or not row["final"]:
-        obs_y = nws.fetch_day_observations(client, station, yesterday, cfg.forecast.nws_user_agent)
+        obs_y = _fetch_obs(client, station, yesterday, cfg.forecast.nws_user_agent)
         if obs_y is not None and obs_y.high_f is not None:
             db.upsert_observation(
                 conn, station.station_id, yesterday.isoformat(),
@@ -110,7 +117,7 @@ def _update_observations(conn, client, station, cfg, today_local: date) -> nws.O
                 final=obs_y.complete,
             )
 
-    obs = nws.fetch_day_observations(client, station, today_local, cfg.forecast.nws_user_agent)
+    obs = _fetch_obs(client, station, today_local, cfg.forecast.nws_user_agent)
     if obs is not None and obs.high_f is not None:
         db.upsert_observation(
             conn, station.station_id, today_local.isoformat(),
@@ -135,8 +142,8 @@ def _settle_paper_positions(conn, client, executor, cfg: Settings, report: Cycle
             continue
         row = db.get_observation(conn, claim.station_id, claim.resolution_date.isoformat())
         if row is None or not row["final"]:
-            obs = nws.fetch_day_observations(client, station, claim.resolution_date,
-                                             cfg.forecast.nws_user_agent)
+            obs = _fetch_obs(client, station, claim.resolution_date,
+                             cfg.forecast.nws_user_agent)
             if obs is None or obs.high_f is None:
                 report.notes.append(f"settlement pending (no obs): {pos['market_id']}")
                 continue
@@ -231,12 +238,18 @@ def run_cycle(settings: Settings, dry_run: bool = False, live_ack: bool = False)
             report.notes.append(f"gamma_failed:{exc}")
             markets = []
 
-        # 7. parse claims
+        # 7. parse claims; trade only cities enabled in config
         parsed: list[tuple[gamma.GammaMarket, WeatherClaim]] = []
         for market in markets:
             result = parse_market(market.id, market.question, market.description, market.end_date)
             if result.claim is None:
                 d = Decision(market.id, market.question, "skip", result.skip_reason)
+                report.decisions.append(d)
+                _record(conn, cycle_id, d)
+                continue
+            if result.claim.city not in settings.cities:
+                d = Decision(market.id, market.question, "skip",
+                             f"city_not_enabled:{result.claim.city}", claim=result.claim)
                 report.decisions.append(d)
                 _record(conn, cycle_id, d)
                 continue

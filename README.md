@@ -208,8 +208,15 @@ writes, no `--dangerously-skip-permissions` — summarizes the last 24 h
 patterns) and sends it to Telegram + email. The 20-minute trading loop is
 deterministic Python; no LLM call exists anywhere in that path.
 
-## Phase 2 (not enabled)
+## Coverage
 
-Taipei and Hong Kong markets resolve against non-NWS observation sources.
-`stations.py` has a `source` field so adapters can be added; those cities
-must not be added to the allowlist until an adapter + tests exist.
+The bot trades worldwide: 19 cities (top 2 by Polymarket volume per global
+timezone), configured in `config.yaml` under `cities:`. US cities resolve
+in whole deg F via api.weather.gov; international cities resolve in whole
+deg C and are observed via aviationweather.gov global METARs — the same
+reports the weather.gov timeseries resolution pages display. Supported but
+not enabled by default: Chicago, Miami, Austin, Seattle.
+
+NOT supportable: Hong Kong and Taipei — their markets resolve directly
+against HKO/CWA with no public METAR resolution source, so the parser
+skips them (correctly).

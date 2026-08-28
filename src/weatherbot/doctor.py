@@ -99,6 +99,18 @@ def _check_forecasts(settings: Settings, client: httpx.Client, r: Report) -> Non
     except Exception as exc:
         r.add(FAIL, "Open-Meteo ensemble API", str(exc)[:120])
 
+    try:
+        resp = client.get(
+            "https://aviationweather.gov/api/data/metar",
+            params={"ids": "EGLC", "format": "json", "hours": 2},
+            headers={"User-Agent": settings.forecast.nws_user_agent},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        r.add(PASS, "AviationWeather METAR API (international obs)")
+    except Exception as exc:
+        r.add(FAIL, "AviationWeather METAR API (international obs)", str(exc)[:120])
+
     ua = settings.forecast.nws_user_agent
     if "set-your-contact-here" in ua:
         r.add(TODO, "NWS User-Agent",

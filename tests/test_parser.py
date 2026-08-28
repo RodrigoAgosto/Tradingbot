@@ -125,17 +125,50 @@ def test_city_station_mismatch_skipped():
     assert r.skip_reason == "question_city_contradicts_rules_station"
 
 
-def test_true_celsius_market_skipped():
-    rules = NYC_RULES.replace("degrees Fahrenheit", "degrees Celsius").replace(
-        "displays °F", "displays °C").replace("Fahrenheit and Celsius", "Celsius and Kelvin")
+def test_celsius_market_on_fahrenheit_station_skipped():
+    # a deg C market claiming to resolve at LaGuardia (a deg F station)
+    # means we misread something -> skip
     r = parse_market("m10", "Will the highest temperature in New York City be 29°C or higher "
-                     "on August 27?", rules, END)
+                     "on August 27?", NYC_RULES, END)
     assert r.claim is None
-    assert r.skip_reason == "celsius_market_unsupported"
+    assert "unit_mismatch" in r.skip_reason
+
+
+BEIJING_RULES = (
+    "This market will resolve to the temperature that is the highest temperature "
+    "recorded by NOAA at the Beijing Capital International Airport Station in degrees "
+    "Celsius on 28 Aug '26.\n\n"
+    "The resolution source for this market will be information from NOAA, available "
+    "here: https://www.weather.gov/wrh/timeseries?site=zbaa\n\n"
+    'To toggle between Fahrenheit and Celsius, click the button until the relevant '
+    "table displays °C."
+)
+
+
+def test_parse_celsius_exact_bucket():
+    r = parse_market("m11", "Will the highest temperature in Beijing be 24°C on August 28?",
+                     BEIJING_RULES, END)
+    c = r.claim
+    assert c is not None, r.skip_reason
+    assert c.station_id == "ZBAA"
+    assert c.unit == "C"
+    assert c.comparator == "between"
+    assert c.threshold_low == 23.5
+    assert c.threshold_high == 24.5
+
+
+def test_parse_celsius_or_higher():
+    r = parse_market("m12", "Will the highest temperature in Beijing be 30°C or higher on August 28?",
+                     BEIJING_RULES, END)
+    c = r.claim
+    assert c is not None, r.skip_reason
+    assert c.comparator == "above"
+    assert c.threshold_low == 29.5
+    assert c.unit == "C"
 
 
 def test_no_threshold_skipped():
-    r = parse_market("m11", "Will it be hot in New York City on August 27?", NYC_RULES.split("between")[0] +
+    r = parse_market("m13", "Will it be hot in New York City on August 27?", NYC_RULES.split("between")[0] +
                      " https://www.weather.gov/wrh/timeseries?site=klga", END)
     assert r.claim is None
     assert r.skip_reason == "threshold_unrecognized"

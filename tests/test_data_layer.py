@@ -80,6 +80,64 @@ def test_nws_hourly_metar_selection():
     assert nws._c_to_display_f(25.6) == 78.0  # rounds like the display
 
 
+def test_default_cities_top2_per_global_timezone():
+    s = Settings()
+    assert len(s.cities) == 19
+    # every enabled city must map to a supported station
+    from weatherbot.forecast.stations import STATIONS
+    supported = {st.city for st in STATIONS.values()}
+    assert set(s.cities) <= supported
+    for banned in ("Hong Kong", "Taipei"):
+        assert banned not in s.cities and banned not in supported
+
+
+def test_awc_reduce_reports():
+    from datetime import date
+    from zoneinfo import ZoneInfo
+
+    from weatherbot.forecast.awc import reduce_reports
+
+    tz = ZoneInfo("Europe/London")
+    reports = [
+        {"reportTime": "2026-08-28T09:20:00.000Z", "temp": 18},
+        {"reportTime": "2026-08-28T09:50:00.000Z", "temp": 19},
+        {"reportTime": "2026-08-28T13:50:00.000Z", "temp": 24},
+        {"reportTime": "2026-08-28T18:50:00.000Z", "temp": 21},
+        # 22:00Z Aug 27 = 23:00 Aug 27 BST — previous local day, excluded
+        {"reportTime": "2026-08-27T22:00:00.000Z", "temp": 30},
+        # missing temp: skipped
+        {"reportTime": "2026-08-28T10:20:00.000Z", "temp": None},
+    ]
+    obs = reduce_reports(reports, date(2026, 8, 28), tz)
+    assert obs.high_f == 24.0  # values are deg C for awc stations
+    assert obs.low_f == 18.0
+    assert obs.current_f == 21.0  # latest report of the day
+    assert obs.n_obs == 3  # distinct local hours covered (10, 14, 19 BST)
+
+
+def test_celsius_distribution_scaling():
+    from datetime import date
+
+    from weatherbot.forecast.distribution import Calibration, fair_value
+    from weatherbot.markets.parser import WeatherClaim
+
+    def c_claim(low, high):
+        return WeatherClaim(
+            market_id="m", city="London", station_id="EGLC", metric="high_temp",
+            comparator="between", threshold_low=low, threshold_high=high,
+            unit="C", resolution_date=date(2026, 8, 28), resolution_source="t",
+        )
+
+    # 30-member ensemble tightly at 24C: the 24C bucket should be likely,
+    # which requires the sigma floor to be C-scaled (a 0.6F-equivalent floor
+    # in C units would smear too little; a 0.6C floor too much)
+    members = [24.0] * 15 + [23.6] * 8 + [24.4] * 7
+    fv = fair_value(c_claim(23.5, 24.5), members, 1, Calibration())
+    assert fv.probability > 0.6
+    fv_off = fair_value(c_claim(27.5, 28.5), members, 1, Calibration())
+    assert fv_off.probability < 0.1
+
+
 def test_halted_cycle_does_nothing(tmp_path):
     db_path = tmp_path / "halted.db"
     conn = db.connect(db_path)

@@ -82,9 +82,30 @@ class AlertsConfig(BaseModel):
     email: EmailConfig = Field(default_factory=EmailConfig)
 
 
+# Default tradeable cities: top 2 by Polymarket 24h volume per GLOBAL
+# timezone (measured 2026-08-27). Hong Kong and Taipei are excluded because
+# their markets resolve against CWA/HKO directly (no public METAR resolution
+# source). The full supported station universe lives in forecast/stations.py;
+# this list only gates which of them the bot will trade.
+DEFAULT_CITIES = [
+    "Los Angeles", "San Francisco",   # UTC-7
+    "Denver",                          # UTC-6 (only listed city)
+    "Dallas", "Houston",               # UTC-5
+    "New York", "Atlanta",             # UTC-4
+    "Buenos Aires", "Sao Paulo",       # UTC-3
+    "London",                          # UTC+1 (only listed city)
+    "Munich", "Paris",                 # UTC+2
+    "Ankara", "Tel Aviv",              # UTC+3
+    "Beijing", "Kuala Lumpur",         # UTC+8
+    "Tokyo", "Seoul",                  # UTC+9
+    "Wellington",                      # UTC+12
+]
+
+
 class Settings(BaseModel):
     mode: Literal["paper", "live"] = PAPER
     db_path: str = "weatherbot.db"
+    cities: list[str] = Field(default_factory=lambda: list(DEFAULT_CITIES))
     strategy: StrategyConfig = Field(default_factory=StrategyConfig)
     risk: RiskConfig = Field(default_factory=RiskConfig)
     staleness: StalenessConfig = Field(default_factory=StalenessConfig)

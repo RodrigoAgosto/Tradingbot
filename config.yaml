@@ -9,6 +9,31 @@
 
 db_path: "weatherbot.db"
 
+# Cities the bot will trade: top 2 by market volume per GLOBAL timezone
+# (volumes measured 2026-08-27; adjust freely). Supported but not enabled:
+# Chicago, Miami, Austin, Seattle. Not supportable (resolve via CWA/HKO,
+# no public METAR source): Hong Kong, Taipei.
+cities:
+  - "Los Angeles"    # UTC-7
+  - "San Francisco"  # UTC-7
+  - "Denver"         # UTC-6 (only listed city)
+  - "Dallas"         # UTC-5
+  - "Houston"        # UTC-5
+  - "New York"       # UTC-4
+  - "Atlanta"        # UTC-4
+  - "Buenos Aires"   # UTC-3
+  - "Sao Paulo"      # UTC-3
+  - "London"         # UTC+1 (only listed city)
+  - "Munich"         # UTC+2
+  - "Paris"          # UTC+2
+  - "Ankara"         # UTC+3
+  - "Tel Aviv"       # UTC+3
+  - "Beijing"        # UTC+8
+  - "Kuala Lumpur"   # UTC+8
+  - "Tokyo"          # UTC+9
+  - "Seoul"          # UTC+9
+  - "Wellington"     # UTC+12
+
 strategy:
   min_edge: 0.08            # minimum |fair - executable| to enter
   max_edge: 0.40            # sanity gate: bigger edges mean our data is wrong,

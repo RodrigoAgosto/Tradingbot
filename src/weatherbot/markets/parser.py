@@ -83,6 +83,10 @@ _OR_HIGHER_RE = re.compile(rf"{_NUM}\s*°?\s*[FC]?\s*(?:or|and)\s+(?:higher|abov
 _OR_LOWER_RE = re.compile(rf"{_NUM}\s*°?\s*[FC]?\s*(?:or|and)\s+(?:lower|below|less|colder|fewer)", re.IGNORECASE)
 _ABOVE_RE = re.compile(rf"(?:above|exceeds?|greater\s+than|higher\s+than|more\s+than|over)\s+{_NUM}", re.IGNORECASE)
 _BELOW_RE = re.compile(rf"(?:below|under|less\s+than|lower\s+than|fewer\s+than)\s+{_NUM}", re.IGNORECASE)
+# International phrasing: "be 30°C on August 28" = exactly 30 as displayed,
+# i.e. the whole-degree bucket (29.5, 30.5). The trailing "on/in" guard keeps
+# this from swallowing "be 30°C or higher".
+_EXACT_RE = re.compile(rf"be\s+{_NUM}\s*°\s*[FC]\s+(?:on|in)\b", re.IGNORECASE)
 
 
 def _detect_metric(text: str) -> str | None:
@@ -101,16 +105,28 @@ def _detect_metric(text: str) -> str | None:
     return None
 
 
-def _detect_unit(text: str, metric: str) -> str:
-    t = text.lower()
+def _detect_unit(question: str, description: str, metric: str) -> str:
+    """Every rules text carries the 'toggle between Fahrenheit and Celsius'
+    display boilerplate, so keyword presence alone is useless. Precedence:
+    the unit symbol in the QUESTION, then the 'degrees X' resolution phrase,
+    then the 'displays °X' phrase."""
+    q, d = question.lower(), description.lower()
     if metric in ("high_temp", "low_temp"):
-        # Fahrenheit takes precedence: standard rules boilerplate mentions
-        # Celsius only in a "toggle the display" instruction.
-        if "fahrenheit" in t or "°f" in t:
+        for text in (q,):
+            if "°f" in text:
+                return "F"
+            if "°c" in text:
+                return "C"
+        if "degrees fahrenheit" in d:
             return "F"
-        if "celsius" in t or "°c" in t:
+        if "degrees celsius" in d:
+            return "C"
+        if "displays °f" in d:
+            return "F"
+        if "displays °c" in d:
             return "C"
         return "F"
+    t = q + d
     if "mm" in t or "millimet" in t:
         return "mm"
     return "in"
@@ -152,6 +168,11 @@ def _detect_thresholds(text: str) -> tuple[str, float | None, float | None] | No
     if m:
         v = float(m.group(1))
         return "below", None, (v - 0.5 if _is_integer(v) else v)
+
+    m = _EXACT_RE.search(text)
+    if m:
+        v = float(m.group(1))
+        return "between", v - 0.5, v + 0.5
 
     return None
 
@@ -240,9 +261,11 @@ def parse_market(
     if resolution_date is None:
         return ParseResult(skip_reason="resolution_date_unrecognized")
 
-    unit = _detect_unit(full, metric)
-    if unit == "C":
-        return ParseResult(skip_reason="celsius_market_unsupported")
+    unit = _detect_unit(question, description, metric)
+    # The market's unit must match what the station's resolution page
+    # displays — a mismatch means we misidentified something. Skip.
+    if unit in ("F", "C") and unit != station.unit:
+        return ParseResult(skip_reason=f"unit_mismatch:market_{unit}_station_{station.unit}")
 
     claim = WeatherClaim(
         market_id=market_id,
