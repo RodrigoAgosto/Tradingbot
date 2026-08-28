@@ -62,8 +62,17 @@ class RiskManager:
 
     # --- kill switches ------------------------------------------------------
 
+    def equity(self, cash: float) -> float:
+        """Cash plus the cost basis of open positions. Kill switches measure
+        EQUITY, not cash: moving cash into a position is not a loss, and a
+        false daily-loss halt every time the book fills would train the
+        operator to ignore real halts."""
+        open_cost = sum(p["cost_usd"] for p in db.get_open_positions(self.conn))
+        return cash + open_cost
+
     def check_kill_switches(self, bankroll: float, day_start_bankroll: float) -> str | None:
-        """Halts trading entirely when breached. Returns the halt reason."""
+        """Halts trading entirely when breached. Both arguments are EQUITY
+        values (see equity()). Returns the halt reason."""
         lim = self.limits
         if bankroll < lim.bankroll_floor_usd:
             reason = f"bankroll_floor: bankroll ${bankroll:.2f} < ${lim.bankroll_floor_usd:.2f}"

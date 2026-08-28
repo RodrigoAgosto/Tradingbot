@@ -215,9 +215,12 @@ def run_cycle(settings: Settings, dry_run: bool = False, live_ack: bool = False)
             bankroll = executor.bankroll()
             report.bankroll = bankroll
 
-        # 5. daily loss / floor kill switches
-        day_start = db.get_day_start_bankroll(conn, now.date(), bankroll)
-        halt_reason = risk.check_kill_switches(bankroll, day_start)
+        # 5. daily loss / floor kill switches — measured on EQUITY (cash +
+        #    open position cost basis). Cash alone would read every freshly
+        #    opened position as a "loss" and false-trigger the halt.
+        equity = risk.equity(bankroll)
+        day_start = db.get_day_start_bankroll(conn, now.date(), equity)
+        halt_reason = risk.check_kill_switches(equity, day_start)
         if halt_reason:
             if not dry_run:
                 notify_urgent(settings.alerts, f"TRADING HALTED: {halt_reason}")

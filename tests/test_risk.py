@@ -93,6 +93,28 @@ def test_daily_loss_kill_switch_halts_and_persists(conn, tmp_path):
     conn2.close()
 
 
+def test_opening_positions_is_not_a_daily_loss(conn):
+    """Regression: the halt fired when cash dropped from opening positions.
+    Equity (cash + open cost basis) must be the kill-switch measure."""
+    rm = RiskManager(conn, RiskConfig())
+    # day start: $1000 cash, no positions -> equity 1000
+    # then $185 moves into open positions: cash 815, equity still 1000
+    _open_position(conn, "m1", 50.0, city="London")
+    _open_position(conn, "m2", 47.5, city="Munich")
+    _open_position(conn, "m3", 45.0, city="Kuala Lumpur")
+    _open_position(conn, "m4", 42.5, city="Tokyo")
+    equity = rm.equity(cash=815.0)
+    assert equity == 1000.0
+    assert rm.check_kill_switches(equity, day_start_bankroll=1000.0) is None
+    assert not db.is_halted(conn)[0]
+    # a REAL realized loss still halts: positions settle at zero, cash 815
+    for m in ("m1", "m2", "m3", "m4"):
+        db.close_position(conn, m, outcome="lost", pnl_usd=0.0, status="resolved")
+    equity = rm.equity(cash=815.0)
+    assert equity == 815.0
+    assert rm.check_kill_switches(equity, 1000.0) is not None
+
+
 def test_bankroll_floor_halts(conn):
     rm = RiskManager(conn, RiskConfig())
     reason = rm.check_kill_switches(bankroll=24.0, day_start_bankroll=24.0)
