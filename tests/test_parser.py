@@ -102,11 +102,11 @@ def test_city_alias_alone_is_not_enough():
 
 
 def test_unknown_station_skipped():
-    rules = NYC_RULES.replace("site=klga", "site=kmia").replace("LaGuardia", "Miami Intl")
-    r = parse_market("m7", "Will the highest temperature in Miami be 90°F or higher on August 27?",
+    rules = NYC_RULES.replace("site=klga", "site=kphx").replace("LaGuardia", "Phoenix Sky Harbor")
+    r = parse_market("m7", "Will the highest temperature in Phoenix be 105°F or higher on August 27?",
                      rules, END)
     assert r.claim is None
-    assert "station_not_in_allowlist:KMIA" in r.skip_reason
+    assert "station_not_in_allowlist:KPHX" in r.skip_reason
 
 
 def test_no_resolution_text_skipped():

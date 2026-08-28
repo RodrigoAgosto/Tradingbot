@@ -48,6 +48,69 @@ STATIONS: dict[str, Station] = {
         timezone="America/Chicago",
         source="nws",
     ),
+    "KLAX": Station(
+        station_id="KLAX",
+        city="Los Angeles",
+        name="Los Angeles Intl Airport",
+        lat=33.9382,
+        lon=-118.3866,
+        timezone="America/Los_Angeles",
+        source="nws",
+    ),
+    "KHOU": Station(
+        station_id="KHOU",
+        city="Houston",
+        name="Houston Hobby Airport",
+        lat=29.6454,
+        lon=-95.2789,
+        timezone="America/Chicago",
+        source="nws",
+    ),
+    "KMIA": Station(
+        station_id="KMIA",
+        city="Miami",
+        name="Miami Intl Airport",
+        lat=25.7906,
+        lon=-80.3164,
+        timezone="America/New_York",
+        source="nws",
+    ),
+    "KATL": Station(
+        station_id="KATL",
+        city="Atlanta",
+        name="Atlanta Hartsfield-Jackson Intl Airport",
+        lat=33.6301,
+        lon=-84.4418,
+        timezone="America/New_York",
+        source="nws",
+    ),
+    "KDAL": Station(
+        station_id="KDAL",
+        city="Dallas",
+        name="Dallas Love Field",
+        lat=32.8471,
+        lon=-96.8518,
+        timezone="America/Chicago",
+        source="nws",
+    ),
+    "KSFO": Station(
+        station_id="KSFO",
+        city="San Francisco",
+        name="San Francisco Intl Airport",
+        lat=37.6188,
+        lon=-122.3754,
+        timezone="America/Los_Angeles",
+        source="nws",
+    ),
+    "KAUS": Station(
+        station_id="KAUS",
+        city="Austin",
+        name="Austin-Bergstrom Intl Airport",
+        lat=30.1831,
+        lon=-97.6799,
+        timezone="America/Chicago",
+        source="nws",
+    ),
 }
 
 # Lowercase CITY alias -> station id. Used only for the question/rules
@@ -58,6 +121,13 @@ CITY_ALIASES: dict[str, str] = {
     "new york city": "KLGA",
     "nyc": "KLGA",
     "chicago": "KORD",
+    "los angeles": "KLAX",
+    "houston": "KHOU",
+    "miami": "KMIA",
+    "atlanta": "KATL",
+    "dallas": "KDAL",
+    "san francisco": "KSFO",
+    "austin": "KAUS",
 }
 
 # Station-SPECIFIC names. These may identify the station from the resolution
@@ -68,6 +138,13 @@ STATION_NAME_ALIASES: dict[str, str] = {
     "la guardia": "KLGA",
     "o'hare": "KORD",
     "ohare": "KORD",
+    "los angeles international": "KLAX",
+    "hobby": "KHOU",
+    "miami international": "KMIA",
+    "hartsfield": "KATL",
+    "love field": "KDAL",
+    "san francisco international": "KSFO",
+    "bergstrom": "KAUS",
 }
 
 
