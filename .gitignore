@@ -15,3 +15,6 @@ __pycache__/
 !.env.example
 *.key
 *.pem
+
+# review artifacts
+.review_snapshot.md

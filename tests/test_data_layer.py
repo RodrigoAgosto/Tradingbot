@@ -152,3 +152,27 @@ def test_halted_cycle_does_nothing(tmp_path):
     assert conn.execute("SELECT COUNT(*) FROM cycles").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
     conn.close()
+
+
+def test_review_snapshot_builds_from_fresh_db(tmp_path):
+    import importlib.util
+    from pathlib import Path
+
+    from weatherbot import db as wdb
+
+    conn = wdb.connect(tmp_path / "snap.db")
+    wdb.set_paper_bankroll(conn, 950.0)
+    wdb.open_position(conn, {
+        "market_id": "m1", "token_id": "t", "city": "London", "station_id": "EGLC",
+        "side": "NO", "shares": 10, "avg_price": 0.5, "cost_usd": 5.0,
+    })
+    conn.close()
+
+    spec = importlib.util.spec_from_file_location(
+        "review", Path(__file__).resolve().parents[1] / "scripts" / "review.py")
+    review = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(review)
+    text = review.build_snapshot(tmp_path / "snap.db")
+    assert "## bankroll (cash)" in text and "950.0" in text
+    assert "## open positions" in text and "London" in text
+    assert "## skip reasons last 24h" in text
