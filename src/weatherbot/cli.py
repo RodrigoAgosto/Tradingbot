@@ -109,6 +109,14 @@ def cmd_doctor(args) -> int:
     return run_doctor(load_settings(args.config))
 
 
+def cmd_dashboard(args) -> int:
+    from weatherbot.dashboard import run_dashboard
+
+    settings = load_settings(args.config)
+    run_dashboard(settings.db_path, port=args.port, open_browser=not args.no_browser)
+    return 0
+
+
 def cmd_init_db(args) -> int:
     settings = load_settings(args.config)
     conn = db.connect(settings.db_path)
@@ -146,6 +154,14 @@ def main(argv: list[str] | None = None) -> int:
         "doctor",
         help="verify every prerequisite (sends test alerts, pings heartbeat, checks APIs)",
     ).set_defaults(func=cmd_doctor)
+
+    p_dash = sub.add_parser(
+        "dashboard", help="serve a live local dashboard (equity chart, positions, trades)"
+    )
+    p_dash.add_argument("--port", type=int, default=8787)
+    p_dash.add_argument("--no-browser", action="store_true",
+                        help="don't auto-open the browser")
+    p_dash.set_defaults(func=cmd_dashboard)
 
     args = parser.parse_args(argv)
     try:

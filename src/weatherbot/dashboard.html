@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>weatherbot</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface-1:   #fcfcfb;
+    --text-primary:#0b0b0b;
+    --text-secondary:#52514e;
+    --muted:       #898781;
+    --grid:        #e1e0d9;
+    --baseline:    #c3c2b7;
+    --border:      rgba(11,11,11,0.10);
+    --series-1:    #2a78d6;
+    --good-text:   #006300;
+    --status-good: #0ca30c;
+    --status-critical:#d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page:        #0d0d0d;
+      --surface-1:   #1a1a19;
+      --text-primary:#ffffff;
+      --text-secondary:#c3c2b7;
+      --muted:       #898781;
+      --grid:        #2c2c2a;
+      --baseline:    #383835;
+      --border:      rgba(255,255,255,0.10);
+      --series-1:    #3987e5;
+      --good-text:   #0ca30c;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; background: var(--page); color: var(--text-primary);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 20px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 16px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; }
+  .sub { color: var(--text-secondary); font-size: 13px; }
+  .chip { display: inline-block; padding: 1px 8px; border: 1px solid var(--border);
+          border-radius: 999px; font-size: 12px; color: var(--text-secondary); }
+  .chip.halted { color: var(--status-critical); border-color: var(--status-critical); font-weight: 600; }
+  .card { background: var(--surface-1); border: 1px solid var(--border);
+          border-radius: 10px; padding: 16px; }
+  .card h2 { font-size: 13px; font-weight: 600; color: var(--text-secondary);
+             margin: 0 0 10px; text-transform: uppercase; letter-spacing: .04em; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .kpi .label { font-size: 12px; color: var(--muted); }
+  .kpi .value { font-size: 26px; font-weight: 650; margin-top: 2px; }
+  .kpi .delta { font-size: 13px; margin-top: 2px; }
+  .delta.up   { color: var(--good-text); }
+  .delta.down { color: var(--status-critical); }
+  .chart-box { position: relative; }
+  svg { display: block; width: 100%; height: auto; }
+  .tooltip { position: absolute; pointer-events: none; background: var(--surface-1);
+             border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+             font-size: 12px; color: var(--text-primary); display: none;
+             box-shadow: 0 2px 10px rgba(0,0,0,.12); white-space: nowrap; }
+  .tooltip .t { color: var(--muted); }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px;
+       border-bottom: 1px solid var(--grid); padding: 4px 10px 6px 0; }
+  td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--grid);
+       color: var(--text-primary); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.q { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+         color: var(--text-secondary); }
+  .outcome { font-weight: 600; font-size: 12px; }
+  .outcome.won    { color: var(--good-text); }
+  .outcome.lost   { color: var(--status-critical); }
+  .outcome.exited { color: var(--text-secondary); }
+  .empty { color: var(--muted); padding: 24px 0; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>weatherbot</h1>
+    <span class="chip" id="mode-chip">…</span>
+    <span class="chip halted" id="halt-chip" hidden>HALTED</span>
+    <span class="sub" id="last-cycle"></span>
+  </header>
+
+  <div class="card">
+    <div class="kpis" id="kpis"></div>
+  </div>
+
+  <div class="card">
+    <h2>Equity over time</h2>
+    <div class="chart-box" id="chart-box">
+      <svg id="chart" viewBox="0 0 960 300" preserveAspectRatio="none" aria-label="Equity over time"></svg>
+      <div class="tooltip" id="tip"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Open positions</h2>
+    <div class="tablewrap"><table id="open-table"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Settled trades</h2>
+    <div class="tablewrap"><table id="settled-table"></table></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt$ = v => { if (v == null) return "–"; const n = Number(v); const s = Math.abs(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}); return (n < 0 ? "−$" : "$") + s; };
+const fmtT = iso => iso ? new Date(iso).toLocaleString(undefined, {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) : "–";
+
+let series = [];
+
+function kpi(label, value, delta) {
+  return `<div class="kpi"><div class="label">${label}</div><div class="value">${value}</div>${delta || ""}</div>`;
+}
+
+function render(data) {
+  const s = data.summary || {};
+  $("mode-chip").textContent = (s.last_cycle && s.last_cycle.mode || "paper") + " mode";
+  $("halt-chip").hidden = !s.halted;
+  if (s.halted) $("halt-chip").title = s.halt_reason || "";
+  $("last-cycle").textContent = s.last_cycle
+    ? `last cycle #${s.last_cycle.id} · ${fmtT(s.last_cycle.started_at)} · ${s.last_cycle.status}` : "no cycles yet";
+
+  const start = series.length ? series[0].equity : null;
+  let deltaHtml = "";
+  if (start != null && s.equity != null) {
+    const d = s.equity - start, pct = (d / start * 100);
+    const cls = d >= 0 ? "up" : "down", sign = d >= 0 ? "+" : "−";
+    deltaHtml = `<div class="delta ${cls}">${sign}${fmt$(Math.abs(d)).slice(1)} (${sign}${Math.abs(pct).toFixed(1)}%) since start</div>`;
+  }
+  const resolved = (s.wins || 0) + (s.losses || 0);
+  const winRate = resolved ? Math.round(s.wins / resolved * 100) + "%" : "–";
+  $("kpis").innerHTML =
+    kpi("Equity", fmt$(s.equity), deltaHtml) +
+    kpi("Cash", fmt$(s.cash)) +
+    kpi("Open exposure", fmt$(s.open_cost)) +
+    kpi("Realized P&L", fmt$(s.realized_pnl)) +
+    kpi("Win rate", `${winRate}`, `<div class="delta">${s.wins || 0}W · ${s.losses || 0}L</div>`) +
+    kpi("Open positions", (data.open_positions || []).length);
+
+  renderChart();
+  renderOpen(data.open_positions || []);
+  renderSettled(data.settled || []);
+}
+
+const M = {l: 58, r: 16, t: 14, b: 26}, W = 960, H = 300;
+
+function scale(points) {
+  const xs = points.map(p => p.x), ys = points.map(p => p.equity);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  let y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const pad = Math.max((y1 - y0) * 0.12, 1);
+  y0 -= pad; y1 += pad;
+  return {
+    x: v => M.l + (x1 === x0 ? 0.5 : (v - x0) / (x1 - x0)) * (W - M.l - M.r),
+    y: v => H - M.b - (v - y0) / (y1 - y0) * (H - M.t - M.b),
+    y0, y1,
+  };
+}
+
+function renderChart() {
+  const svg = $("chart");
+  if (series.length < 2) {
+    svg.innerHTML = `<text x="480" y="150" text-anchor="middle" fill="var(--muted)" font-size="14">not enough cycles yet — check back after a few</text>`;
+    return;
+  }
+  const pts = series.map(p => ({...p, x: new Date(p.t).getTime()}));
+  const sc = scale(pts);
+  let out = "";
+  // horizontal gridlines + $ labels (recessive)
+  const steps = 4;
+  for (let i = 0; i <= steps; i++) {
+    const v = sc.y0 + (sc.y1 - sc.y0) * i / steps, y = sc.y(v);
+    out += `<line x1="${M.l}" x2="${W - M.r}" y1="${y}" y2="${y}" stroke="var(--grid)" stroke-width="1"/>`;
+    out += `<text x="${M.l - 8}" y="${y + 4}" text-anchor="end" fill="var(--muted)" font-size="11" style="font-variant-numeric:tabular-nums">$${Math.round(v)}</text>`;
+  }
+  // start-of-history reference (dashed, neutral)
+  const yStart = sc.y(pts[0].equity);
+  out += `<line x1="${M.l}" x2="${W - M.r}" y1="${yStart}" y2="${yStart}" stroke="var(--baseline)" stroke-width="1" stroke-dasharray="4 4"/>`;
+  // x labels: first, middle, last
+  [0, Math.floor(pts.length / 2), pts.length - 1].forEach(i => {
+    const p = pts[i];
+    const anchor = i === 0 ? "start" : (i === pts.length - 1 ? "end" : "middle");
+    out += `<text x="${sc.x(p.x)}" y="${H - 8}" text-anchor="${anchor}" fill="var(--muted)" font-size="11">${fmtT(p.t)}</text>`;
+  });
+  // the line
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${sc.x(p.x).toFixed(1)},${sc.y(p.equity).toFixed(1)}`).join("");
+  out += `<path d="${d}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  // latest point marker + direct label
+  const last = pts[pts.length - 1];
+  out += `<circle cx="${sc.x(last.x)}" cy="${sc.y(last.equity)}" r="4" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2"/>`;
+  out += `<text x="${sc.x(last.x) - 8}" y="${sc.y(last.equity) - 10}" text-anchor="end" fill="var(--text-primary)" font-size="12" font-weight="600">${fmt$(last.equity)}</text>`;
+  // hover layer
+  out += `<rect id="hover-rect" x="${M.l}" y="${M.t}" width="${W - M.l - M.r}" height="${H - M.t - M.b}" fill="transparent"/>`;
+  out += `<g id="crosshair" style="display:none"><line id="ch-line" y1="${M.t}" y2="${H - M.b}" stroke="var(--baseline)" stroke-width="1"/><circle id="ch-dot" r="4" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2"/></g>`;
+  svg.innerHTML = out;
+  attachHover(pts, sc);
+}
+
+function attachHover(pts, sc) {
+  const svg = $("chart"), tip = $("tip"), box = $("chart-box");
+  const rect = $("hover-rect"), ch = $("crosshair");
+  function onMove(ev) {
+    const bounds = svg.getBoundingClientRect();
+    const fx = (ev.clientX - bounds.left) / bounds.width * W;
+    let best = pts[0], bd = Infinity;
+    for (const p of pts) { const d = Math.abs(sc.x(p.x) - fx); if (d < bd) { bd = d; best = p; } }
+    const px = sc.x(best.x), py = sc.y(best.equity);
+    ch.style.display = "";
+    $("ch-line").setAttribute("x1", px); $("ch-line").setAttribute("x2", px);
+    $("ch-dot").setAttribute("cx", px); $("ch-dot").setAttribute("cy", py);
+    tip.style.display = "block";
+    tip.innerHTML = `<span class="t">${fmtT(best.t)}</span><br>equity <b>${fmt$(best.equity)}</b> · cash ${fmt$(best.cash)}`;
+    const bx = px / W * bounds.width, by = py / H * bounds.height;
+    tip.style.left = Math.min(bx + 14, bounds.width - tip.offsetWidth - 4) + "px";
+    tip.style.top = Math.max(by - 40, 0) + "px";
+  }
+  rect.addEventListener("mousemove", onMove);
+  rect.addEventListener("mouseleave", () => { tip.style.display = "none"; ch.style.display = "none"; });
+}
+
+function renderOpen(rows) {
+  const t = $("open-table");
+  if (!rows.length) { t.innerHTML = `<tr><td class="empty">no open positions</td></tr>`; return; }
+  t.innerHTML = `<tr><th>Market</th><th>City</th><th>Side</th><th class="num">Shares</th><th class="num">Avg price</th><th class="num">Cost</th><th>Resolves</th></tr>` +
+    rows.map(r => `<tr><td class="q" title="${(r.question || r.market_id)}">${r.question || r.market_id}</td>
+      <td>${r.city || ""}</td><td>${r.side}</td>
+      <td class="num">${Number(r.shares).toFixed(1)}</td>
+      <td class="num">${Number(r.avg_price).toFixed(3)}</td>
+      <td class="num">${fmt$(r.cost_usd)}</td><td>${r.resolution_date || ""}</td></tr>`).join("");
+}
+
+function renderSettled(rows) {
+  const t = $("settled-table");
+  if (!rows.length) { t.innerHTML = `<tr><td class="empty">nothing settled yet</td></tr>`; return; }
+  t.innerHTML = `<tr><th>Closed</th><th>Market</th><th>City</th><th>Side</th><th class="num">Cost</th><th>Outcome</th><th class="num">P&L</th></tr>` +
+    rows.map(r => {
+      const o = (r.outcome || "").toLowerCase();
+      const pnl = r.pnl_usd == null ? "–" : (r.pnl_usd >= 0 ? "+" : "−") + fmt$(Math.abs(r.pnl_usd)).slice(1);
+      const pnlCls = r.pnl_usd >= 0 ? "up" : "down";
+      return `<tr><td>${fmtT(r.closed_at)}</td>
+        <td class="q" title="${(r.question || r.market_id)}">${r.question || r.market_id}</td>
+        <td>${r.city || ""}</td><td>${r.side}</td>
+        <td class="num">${fmt$(r.cost_usd)}</td>
+        <td><span class="outcome ${o}">${(r.outcome || "").toUpperCase()}</span></td>
+        <td class="num delta ${pnlCls}">${pnl}</td></tr>`;
+    }).join("");
+}
+
+async function refresh() {
+  try {
+    const res = await fetch("/data", {cache: "no-store"});
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    series = data.equity_series || [];
+    render(data);
+  } catch (e) {
+    $("last-cycle").textContent = "failed to load data: " + e.message;
+  }
+}
+refresh();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>
