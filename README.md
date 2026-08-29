@@ -157,6 +157,19 @@ and does not ping the heartbeat, so healthchecks keeps reminding you.
 
 ## Going live (deliberately annoying)
 
+Run the readiness checks in this order — each proves a layer without
+risking the next:
+
+1. `uv run python scripts/backtest.py` — the model's Brier score must beat
+   the market's. No edge, no live.
+2. Create + fund the Polymarket account (see Onboarding), put the key and
+   proxy address in the key env file.
+3. `uv sync --extra live`, then `uv run weatherbot live-check` — verifies
+   install, key, proxy address, CLOB authentication, and reads the real
+   balance, **without placing any order**. Everything must pass.
+4. Only then flip the switches below, and watch the first live cycle in
+   the logs/dashboard.
+
 Live order placement requires ALL of:
 
 1. `uv sync --extra live` — installs `py-clob-client`, which a normal sync

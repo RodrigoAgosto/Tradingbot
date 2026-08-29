@@ -109,6 +109,12 @@ def cmd_doctor(args) -> int:
     return run_doctor(load_settings(args.config))
 
 
+def cmd_live_check(args) -> int:
+    from weatherbot.execution.live import live_preflight
+
+    return live_preflight()
+
+
 def cmd_dashboard(args) -> int:
     from weatherbot.dashboard import run_dashboard
 
@@ -154,6 +160,11 @@ def main(argv: list[str] | None = None) -> int:
         "doctor",
         help="verify every prerequisite (sends test alerts, pings heartbeat, checks APIs)",
     ).set_defaults(func=cmd_doctor)
+
+    sub.add_parser(
+        "live-check",
+        help="verify the full live-trading path (auth, balance) WITHOUT placing orders",
+    ).set_defaults(func=cmd_live_check)
 
     p_dash = sub.add_parser(
         "dashboard", help="serve a live local dashboard (equity chart, positions, trades)"

@@ -130,3 +130,16 @@ def test_trading_mode_env_fail_closed(monkeypatch, tmp_path):
     monkeypatch.setenv("TRADING_MODE", "LIVE!!")  # anything not exactly 'live'
     s = load_settings(tmp_path / "nonexistent.yaml")
     assert s.mode == "paper"
+
+
+def test_live_preflight_fails_closed_without_client(monkeypatch, capsys):
+    # py-clob-client is not installed in the test environment, so preflight
+    # must stop at step 1 with the fix printed — and never touch the network
+    from weatherbot.execution.live import live_preflight
+
+    monkeypatch.delenv("POLYMARKET_PRIVATE_KEY", raising=False)
+    rc = live_preflight()
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "no orders will be placed" in out
+    assert "uv sync --extra live" in out

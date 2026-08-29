@@ -30,6 +30,74 @@ class LiveTradingRefused(RuntimeError):
     pass
 
 
+def live_preflight() -> int:
+    """Verify the ENTIRE live path without placing any order.
+
+    Checks, in order: py-clob-client installed, key file/permissions, proxy
+    address set, CLOB authentication (derives API creds), and reads the real
+    USDC balance. Safe to run any time, in any TRADING_MODE. Returns 0 only
+    when everything works.
+    """
+    print("weatherbot live-check — no orders will be placed\n")
+
+    try:
+        from py_clob_client.client import ClobClient  # noqa: PLC0415
+        from py_clob_client.clob_types import AssetType, BalanceAllowanceParams  # noqa: PLC0415
+    except ImportError:
+        print("❌ py-clob-client is not installed.")
+        print("   fix: uv sync --extra live")
+        return 1
+    print("✅ py-clob-client installed")
+
+    try:
+        key = load_private_key()
+    except KeyFileError as exc:
+        print(f"❌ private key: {exc}")
+        print("   fix: set POLYMARKET_PRIVATE_KEY in the key env file "
+              "(Polymarket → Settings → Export private key)")
+        return 1
+    logutil.register_secret(key)
+    print("✅ private key loaded (redaction registered)")
+
+    funder = os.environ.get("POLYMARKET_PROXY_ADDRESS", "").strip()
+    if not funder:
+        print("❌ POLYMARKET_PROXY_ADDRESS is not set in the key env file")
+        print("   fix: copy your proxy wallet address from your Polymarket profile")
+        return 1
+    print(f"✅ proxy address set ({funder[:8]}…)")
+
+    try:
+        client = ClobClient(CLOB_HOST, key=key, chain_id=POLYGON_CHAIN_ID,
+                            signature_type=1, funder=funder)
+        client.set_api_creds(client.create_or_derive_api_creds())
+        print("✅ CLOB authentication OK (API creds derived)")
+    except Exception as exc:
+        print(f"❌ CLOB authentication failed: {str(exc)[:200]}")
+        print("   check the key and proxy address match the same Polymarket account; "
+              "if you signed up with your own wallet (not email), change "
+              "signature_type to 2 in execution/live.py")
+        return 1
+
+    try:
+        res = client.get_balance_allowance(
+            BalanceAllowanceParams(asset_type=AssetType.COLLATERAL))
+        usdc = float(res["balance"]) / 1e6
+        print(f"✅ balance readable: ${usdc:.2f} USDC available")
+        if usdc <= 0:
+            print("   note: account is unfunded — live cycles would run but "
+                  "size every order to $0 and skip")
+    except Exception as exc:
+        print(f"❌ balance check failed: {str(exc)[:200]}")
+        return 1
+
+    print("\nAll live-path checks passed. To actually go live:")
+    print("  1. TRADING_MODE=live in the key env file")
+    print("  2. add --i-understand-this-is-live to the cycle command in the")
+    print("     scheduler wrapper (ops/run_cycle.ps1 or ops/run_cycle.sh)")
+    print("No order can be placed until BOTH are done.")
+    return 0
+
+
 class LiveExecutor:
     mode = "live"
 

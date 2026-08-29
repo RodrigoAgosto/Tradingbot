@@ -49,12 +49,26 @@ class Report:
 
 
 def _check_mode(settings: Settings, r: Report) -> None:
-    if settings.is_live:
-        r.add(FAIL, "trading mode",
-              "TRADING_MODE=live is set — keep it 'paper' until the backtest "
-              "Brier score beats the market")
-    else:
+    if not settings.is_live:
         r.add(PASS, "trading mode", "paper")
+        if os.environ.get("POLYMARKET_PRIVATE_KEY", "").strip():
+            r.add(PASS, "live credentials",
+                  "present but inactive (paper mode) — run `weatherbot live-check` to verify them")
+        return
+    # live mode is a deliberate operator choice; verify its prerequisites
+    r.add(PASS, "trading mode", "LIVE — real orders on scheduled cycles "
+          "(requires the ack flag in the scheduler wrapper)")
+    try:
+        import py_clob_client  # noqa: F401, PLC0415
+        r.add(PASS, "py-clob-client installed")
+    except ImportError:
+        r.add(FAIL, "py-clob-client installed", "run: uv sync --extra live")
+    if not os.environ.get("POLYMARKET_PRIVATE_KEY", "").strip():
+        r.add(FAIL, "live private key", "POLYMARKET_PRIVATE_KEY missing from the key env file")
+    if not os.environ.get("POLYMARKET_PROXY_ADDRESS", "").strip():
+        r.add(FAIL, "live proxy address", "POLYMARKET_PROXY_ADDRESS missing from the key env file")
+    r.add(TODO, "live path verification",
+          "run `weatherbot live-check` to test auth + balance without placing orders")
 
 
 def _check_db(settings: Settings, r: Report) -> None:
