@@ -55,3 +55,41 @@ def test_build_data_settled_and_winrate(tmp_path):
     assert s["wins"] == 1 and s["losses"] == 1
     assert s["realized_pnl"] == 10.0
     assert len(data["settled"]) == 2
+
+
+def test_reset_paper_wipes_ledger_keeps_calibration(tmp_path, monkeypatch, capsys):
+    from weatherbot.cli import main
+
+    dbfile = tmp_path / "reset.db"
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(f'db_path: "{dbfile}"\n')
+    conn = db.connect(dbfile)
+    db.set_paper_bankroll(conn, 850.0)
+    c = db.start_cycle(conn, "paper")
+    db.finish_cycle(conn, c, "ok", bankroll=850.0)
+    db.open_position(conn, {
+        "market_id": "m1", "token_id": "t", "city": "Tokyo", "station_id": "RJTT",
+        "side": "YES", "shares": 10, "avg_price": 0.5, "cost_usd": 5.0,
+    })
+    db.record_forecast_snapshot(conn, "KNYC", "high_temp", 1, "2026-08-28", 80.0, 2.0)
+    conn.close()
+    monkeypatch.setenv("TRADING_MODE", "paper")
+
+    # preview does not delete
+    assert main(["--config", str(cfg), "reset-paper", "--bankroll", "200"]) == 0
+    conn = db.connect(dbfile)
+    assert conn.execute("SELECT COUNT(*) FROM positions").fetchone()[0] == 1
+    conn.close()
+
+    # --yes deletes ledger, keeps calibration, sets bankroll
+    assert main(["--config", str(cfg), "reset-paper", "--bankroll", "200", "--yes"]) == 0
+    conn = db.connect(dbfile)
+    for t in ("positions", "orders", "evaluations", "cycles", "daily_bankroll"):
+        assert conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM calibration_obs").fetchone()[0] == 1
+    assert db.get_paper_bankroll(conn, 999.0) == 200.0
+    conn.close()
+
+    # refused in live mode
+    monkeypatch.setenv("TRADING_MODE", "live")
+    assert main(["--config", str(cfg), "reset-paper", "--yes"]) == 2

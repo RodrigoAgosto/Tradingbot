@@ -109,6 +109,34 @@ def cmd_doctor(args) -> int:
     return run_doctor(load_settings(args.config))
 
 
+def cmd_reset_paper(args) -> int:
+    settings = load_settings(args.config)
+    if settings.is_live:
+        log.error("refusing to reset while TRADING_MODE=live")
+        return 2
+    conn = db.connect(settings.db_path)
+    counts = {
+        table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        for table in ("positions", "orders", "evaluations", "cycles", "daily_bankroll")
+    }
+    print("This will DELETE the paper trading ledger:")
+    for table, n in counts.items():
+        print(f"  {table:15} {n} rows")
+    print(f"and set the paper bankroll to ${args.bankroll:.2f}.")
+    print("Kept: observations, calibration history, forecast cache, halt state.")
+    if not args.yes:
+        print("\nDry preview only — re-run with --yes to actually reset.")
+        conn.close()
+        return 0
+    for table in ("positions", "orders", "evaluations", "cycles", "daily_bankroll"):
+        conn.execute(f"DELETE FROM {table}")
+    conn.commit()
+    db.set_paper_bankroll(conn, args.bankroll)
+    conn.close()
+    print(f"\nreset complete: fresh ledger, paper bankroll ${args.bankroll:.2f}")
+    return 0
+
+
 def cmd_live_check(args) -> int:
     from weatherbot.execution.live import live_preflight
 
@@ -160,6 +188,16 @@ def main(argv: list[str] | None = None) -> int:
         "doctor",
         help="verify every prerequisite (sends test alerts, pings heartbeat, checks APIs)",
     ).set_defaults(func=cmd_doctor)
+
+    p_reset = sub.add_parser(
+        "reset-paper",
+        help="wipe the paper ledger (positions/orders/history) and set a fresh bankroll",
+    )
+    p_reset.add_argument("--bankroll", type=float, default=1000.0,
+                         help="fresh paper bankroll (default 1000)")
+    p_reset.add_argument("--yes", action="store_true",
+                         help="actually reset (without this, prints a preview only)")
+    p_reset.set_defaults(func=cmd_reset_paper)
 
     sub.add_parser(
         "live-check",
