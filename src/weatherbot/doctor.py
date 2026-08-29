@@ -115,6 +115,17 @@ def _check_forecasts(settings: Settings, client: httpx.Client, r: Report) -> Non
 
     try:
         resp = client.get(
+            "https://api.elections.kalshi.com/trade-api/v2/markets",
+            params={"series_ticker": "KXHIGHNY", "status": "open", "limit": 1},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        r.add(PASS, "Kalshi API")
+    except Exception as exc:
+        r.add(FAIL, "Kalshi API", str(exc)[:120])
+
+    try:
+        resp = client.get(
             "https://aviationweather.gov/api/data/metar",
             params={"ids": "EGLC", "format": "json", "hours": 2},
             headers={"User-Agent": settings.forecast.nws_user_agent},

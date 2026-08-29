@@ -82,7 +82,7 @@ def test_nws_hourly_metar_selection():
 
 def test_default_cities_top2_per_global_timezone():
     s = Settings()
-    assert len(s.cities) == 19
+    assert len(s.cities) == 20  # global top-2 roster + Philadelphia (Kalshi)
     # every enabled city must map to a supported station
     from weatherbot.forecast.stations import STATIONS
     supported = {st.city for st in STATIONS.values()}

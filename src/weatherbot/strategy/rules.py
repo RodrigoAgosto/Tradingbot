@@ -20,6 +20,7 @@ class EntryContext:
     volume_24h: float
     has_position: bool
     observed_decided: bool = False  # observation has already settled the market
+    min_volume: float | None = None  # venue-specific liquidity floor (None = config default)
 
 
 def entry_skip_reason(ctx: EntryContext, cfg: StrategyConfig) -> str | None:
@@ -29,8 +30,9 @@ def entry_skip_reason(ctx: EntryContext, cfg: StrategyConfig) -> str | None:
         return "already_in_position"
     if ctx.lead_days > cfg.max_lead_days:
         return f"lead_too_long:{ctx.lead_days:.1f}d>{cfg.max_lead_days}d"
-    if ctx.volume_24h < cfg.min_volume_24h_usd:
-        return f"volume_too_low:{ctx.volume_24h:.0f}<{cfg.min_volume_24h_usd:.0f}"
+    min_volume = ctx.min_volume if ctx.min_volume is not None else cfg.min_volume_24h_usd
+    if ctx.volume_24h < min_volume:
+        return f"volume_too_low:{ctx.volume_24h:.0f}<{min_volume:.0f}"
     if ctx.confidence < cfg.min_confidence:
         return f"confidence_too_low:{ctx.confidence:.2f}<{cfg.min_confidence:.2f}"
     if er.edge < cfg.min_edge:

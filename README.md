@@ -221,9 +221,23 @@ writes, no `--dangerously-skip-permissions` — summarizes the last 24 h
 patterns) and sends it to Telegram + email. The 20-minute trading loop is
 deterministic Python; no LLM call exists anywhere in that path.
 
+## Venues
+
+Two venues, one strategy core:
+
+* **Kalshi** (CFTC-regulated, US-legal, USD-funded) — the venue a US
+  resident can trade live. Structured strikes, station verified from each
+  market's rules token (NYC = Central Park, Chicago = Midway), public
+  orderbooks; the liquidity gate uses resting book notional
+  (`kalshi_min_book_usd`).
+* **Polymarket** (global, crypto) — not fundable from the US; retained as
+  a paper-validation universe.
+
+Enable/disable per venue in `config.yaml` under `venues:`.
+
 ## Coverage
 
-The bot trades worldwide: 19 cities (top 2 by Polymarket volume per global
+The bot trades worldwide: 20 cities (top 2 by Polymarket volume per global
 timezone), configured in `config.yaml` under `cities:`. US cities resolve
 in whole deg F via api.weather.gov; international cities resolve in whole
 deg C and are observed via aviationweather.gov global METARs — the same

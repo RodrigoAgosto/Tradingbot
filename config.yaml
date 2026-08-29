@@ -9,11 +9,19 @@
 
 db_path: "weatherbot.db"
 
-# Cities the bot will trade: top 2 by market volume per GLOBAL timezone
-# (volumes measured 2026-08-27; adjust freely). Supported but not enabled:
-# Chicago, Miami, Austin, Seattle. Not supportable (resolve via CWA/HKO,
-# no public METAR source): Hong Kong, Taipei.
+# Venues to evaluate each cycle. Kalshi is the CFTC-regulated US venue
+# (the one a US resident can fund); Polymarket stays valuable as a paper
+# validation universe even where it cannot be funded.
+venues:
+  - "polymarket"
+  - "kalshi"
+
+# Cities the bot will trade, across all venues. Kalshi adds Philadelphia,
+# Chicago (Midway), Miami, Austin, Seattle, San Francisco as tradeable
+# cities; enable any of them here. Not supportable on Polymarket (resolve
+# via CWA/HKO): Hong Kong, Taipei.
 cities:
+  - "Philadelphia"   # UTC-4 (Kalshi)
   - "Los Angeles"    # UTC-7
   - "San Francisco"  # UTC-7
   - "Denver"         # UTC-6 (only listed city)

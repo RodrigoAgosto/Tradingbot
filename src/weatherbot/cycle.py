@@ -27,7 +27,7 @@ from weatherbot.execution.router import get_executor
 from weatherbot.execution.types import CloseIntent, OrderIntent
 from weatherbot.forecast import awc, distribution, nws, openmeteo
 from weatherbot.forecast.stations import STATIONS, get_station
-from weatherbot.markets import clob, gamma
+from weatherbot.markets import clob, gamma, kalshi
 from weatherbot.markets.parser import WeatherClaim, parse_market
 from weatherbot.risk import RiskManager
 from weatherbot.strategy import rules, sizing
@@ -42,6 +42,7 @@ class Decision:
     question: str
     decision: str            # enter|exit|hold|skip
     skip_reason: str | None = None
+    venue: str = "polymarket"
     claim: WeatherClaim | None = None
     fair_prob: float | None = None
     confidence: float | None = None
@@ -52,6 +53,18 @@ class Decision:
     lead_days: float | None = None
     volume_24h: float | None = None
     cost_usd: float | None = None
+
+
+@dataclass
+class Target:
+    """Venue-agnostic market under evaluation."""
+    venue: str
+    market_id: str
+    question: str
+    claim: WeatherClaim
+    volume_24h: float | None      # None => derive from the book (kalshi)
+    yes_token: str | None = None
+    no_token: str | None = None
 
 
 @dataclass
@@ -92,6 +105,7 @@ def _record(conn, cycle_id: int, d: Decision) -> None:
             "volume_24h": d.volume_24h,
             "decision": d.decision,
             "skip_reason": d.skip_reason,
+            "venue": d.venue,
         },
     )
 
@@ -231,36 +245,51 @@ def run_cycle(settings: Settings, dry_run: bool = False, live_ack: bool = False)
                 heartbeat.ping_success(settings.heartbeat)
             return report
 
-        # 6. discover markets (failure => fail closed: exits still run on
-        #    cached claims? No — without fresh market data we do nothing new)
-        try:
-            markets = gamma.fetch_active_weather_markets(client)
-        except Exception as exc:
-            log.error("gamma discovery failed, no new positions this cycle: %s", exc)
-            report.status = "degraded"
-            report.notes.append(f"gamma_failed:{exc}")
-            markets = []
-
-        # 7. parse claims; trade only cities enabled in config
-        parsed: list[tuple[gamma.GammaMarket, WeatherClaim]] = []
-        for market in markets:
-            result = parse_market(market.id, market.question, market.description, market.end_date)
-            if result.claim is None:
-                d = Decision(market.id, market.question, "skip", result.skip_reason)
-                report.decisions.append(d)
-                _record(conn, cycle_id, d)
-                continue
-            if result.claim.city not in settings.cities:
-                d = Decision(market.id, market.question, "skip",
-                             f"city_not_enabled:{result.claim.city}", claim=result.claim)
-                report.decisions.append(d)
-                _record(conn, cycle_id, d)
-                continue
-            parsed.append((market, result.claim))
+        # 6-7. discover markets per venue and build venue-agnostic targets
+        #      (a venue failing => no new positions from that venue, fail closed)
+        targets: list[Target] = []
+        if "polymarket" in settings.venues:
+            try:
+                markets = gamma.fetch_active_weather_markets(client)
+            except Exception as exc:
+                log.error("gamma discovery failed, no new polymarket positions: %s", exc)
+                report.status = "degraded"
+                report.notes.append(f"gamma_failed:{exc}")
+                markets = []
+            for market in markets:
+                result = parse_market(market.id, market.question, market.description, market.end_date)
+                if result.claim is None:
+                    d = Decision(market.id, market.question, "skip", result.skip_reason)
+                    report.decisions.append(d)
+                    _record(conn, cycle_id, d)
+                    continue
+                if result.claim.city not in settings.cities:
+                    d = Decision(market.id, market.question, "skip",
+                                 f"city_not_enabled:{result.claim.city}", claim=result.claim)
+                    report.decisions.append(d)
+                    _record(conn, cycle_id, d)
+                    continue
+                targets.append(Target("polymarket", market.id, market.question, result.claim,
+                                      market.volume_24h, market.yes_token_id(), market.no_token_id()))
+        if "kalshi" in settings.venues:
+            try:
+                kmarkets, kskips = kalshi.fetch_markets(client, settings.cities)
+                for ticker, reason in kskips:
+                    d = Decision(ticker, ticker, "skip", reason, venue="kalshi")
+                    report.decisions.append(d)
+                    _record(conn, cycle_id, d)
+                for km in kmarkets:
+                    question = f"{km.title} — {km.claim.city} (Kalshi)"
+                    targets.append(Target("kalshi", km.ticker, question, km.claim,
+                                          None, f"{km.ticker}:YES", f"{km.ticker}:NO"))
+            except Exception as exc:
+                log.error("kalshi discovery failed, no new kalshi positions: %s", exc)
+                report.status = "degraded"
+                report.notes.append(f"kalshi_failed:{exc}")
 
         # 8-9. forecasts + observations per station (batched, cached).
         # Open positions' stations are included so exits can be evaluated.
-        stations_needed = {c.station_id for _, c in parsed}
+        stations_needed = {t.claim.station_id for t in targets}
         for pos in db.get_open_positions(conn):
             if pos["station_id"] in STATIONS:
                 stations_needed.add(pos["station_id"])
@@ -284,14 +313,14 @@ def run_cycle(settings: Settings, dry_run: bool = False, live_ack: bool = False)
         db.fill_calibration_actuals(conn)
 
         # 10-12. evaluate every parsed market
-        candidates: list[tuple[rules.EntryContext, Decision, gamma.GammaMarket]] = []
-        for market, claim in parsed:
-            d = _evaluate_market(conn, cycle_id, client, settings, market, claim,
+        candidates: list[tuple[rules.EntryContext, Decision, Target]] = []
+        for target in targets:
+            d = _evaluate_market(conn, cycle_id, client, settings, target,
                                  ensembles, observations, bankroll, risk)
             report.decisions.append(d)
             if d.decision == "candidate":
                 ctx = d._ctx  # type: ignore[attr-defined]
-                candidates.append((ctx, d, market))
+                candidates.append((ctx, d, target))
             else:
                 _record(conn, cycle_id, d)
 
@@ -301,7 +330,7 @@ def run_cycle(settings: Settings, dry_run: bool = False, live_ack: bool = False)
 
         # 13-15. rank, cap, size, route
         candidates.sort(key=lambda t: rules.rank_key(t[0]), reverse=True)
-        for ctx, d, market in candidates:
+        for ctx, d, target in candidates:
             er = ctx.edge_result
             if orders_placed >= risk.limits.max_positions_per_cycle:
                 d.decision, d.skip_reason = "skip", "max_positions_per_cycle"
@@ -324,7 +353,7 @@ def run_cycle(settings: Settings, dry_run: bool = False, live_ack: bool = False)
                 _record(conn, cycle_id, d)
                 continue
             intent = OrderIntent(
-                market_id=market.id,
+                market_id=target.market_id,
                 token_id=er.token_id,
                 side=er.side,
                 price=sized.price,
@@ -334,6 +363,7 @@ def run_cycle(settings: Settings, dry_run: bool = False, live_ack: bool = False)
                 station_id=d.claim.station_id,
                 claim_json=d.claim.model_dump_json(),
                 resolution_date=d.claim.resolution_date.isoformat(),
+                venue=target.venue,
             )
             outcome = executor.open(intent, cycle_id)
             if outcome.ok:
@@ -341,8 +371,9 @@ def run_cycle(settings: Settings, dry_run: bool = False, live_ack: bool = False)
                 bankroll = executor.bankroll()
                 report.bankroll = bankroll
                 d.decision, d.cost_usd = "enter", sized.cost_usd
-                log.info("ENTER %s %s $%.2f @ %.3f edge=%.3f conf=%.2f",
-                         er.side, market.id, sized.cost_usd, sized.price, er.edge, ctx.confidence)
+                log.info("ENTER %s %s/%s $%.2f @ %.3f edge=%.3f conf=%.2f",
+                         er.side, target.venue, target.market_id, sized.cost_usd,
+                         sized.price, er.edge, ctx.confidence)
             else:
                 d.decision, d.skip_reason = "skip", f"execution_failed:{outcome.detail}"
             _record(conn, cycle_id, d)
@@ -369,14 +400,15 @@ def run_cycle(settings: Settings, dry_run: bool = False, live_ack: bool = False)
         conn.close()
 
 
-def _evaluate_market(conn, cycle_id, client, settings: Settings, market, claim,
+def _evaluate_market(conn, cycle_id, client, settings: Settings, target: Target,
                      ensembles, observations, bankroll, risk) -> Decision:
-    d = Decision(market.id, market.question, "skip", claim=claim)
+    claim = target.claim
+    d = Decision(target.market_id, target.question, "skip", claim=claim, venue=target.venue)
     station = get_station(claim.station_id)
     local_today = nws.local_now(station).date()
     lead_days = float((claim.resolution_date - local_today).days)
     d.lead_days = lead_days
-    d.volume_24h = market.volume_24h
+    d.volume_24h = target.volume_24h
 
     if lead_days < 0:
         d.skip_reason = "already_resolved"
@@ -430,14 +462,18 @@ def _evaluate_market(conn, cycle_id, client, settings: Settings, market, claim,
             fv.forecast_mean, fv.forecast_std or 0.0,
         )
 
-    # 11. orderbook -> executable price
-    yes_token, no_token = market.yes_token_id(), market.no_token_id()
+    # 11. orderbook -> executable price (per venue)
+    yes_token, no_token = target.yes_token, target.no_token
     if not yes_token:
         d.skip_reason = "no_token_ids"
         return d
     try:
-        yes_book = clob.fetch_book(client, yes_token)
-        no_book = clob.fetch_book(client, no_token) if no_token else None
+        if target.venue == "kalshi":
+            yes_book, no_book, notional = kalshi.fetch_books(client, target.market_id)
+            d.volume_24h = notional  # liquidity gate proxy: resting notional
+        else:
+            yes_book = clob.fetch_book(client, yes_token)
+            no_book = clob.fetch_book(client, no_token) if no_token else None
     except Exception as exc:
         d.skip_reason = f"book_fetch_failed:{exc}"
         return d
@@ -457,9 +493,11 @@ def _evaluate_market(conn, cycle_id, client, settings: Settings, market, claim,
         edge_result=er,
         confidence=fv.confidence,
         lead_days=lead_days,
-        volume_24h=market.volume_24h,
-        has_position=db.has_position(conn, market.id),
+        volume_24h=d.volume_24h or 0.0,
+        has_position=db.has_position(conn, target.market_id),
         observed_decided=fv.observed_decided,
+        min_volume=(settings.strategy.kalshi_min_book_usd
+                    if target.venue == "kalshi" else None),
     )
     skip = rules.entry_skip_reason(ctx, settings.strategy)
     if skip:
@@ -500,8 +538,13 @@ def _evaluate_exits(conn, cycle_id, client, settings: Settings, executor,
         if fv is None:
             continue
         fair_side = fv.probability if pos["side"] == "YES" else 1.0 - fv.probability
+        venue = pos["venue"] if "venue" in pos.keys() else "polymarket"
         try:
-            book = clob.fetch_book(client, pos["token_id"]) if pos["token_id"] else None
+            if venue == "kalshi":
+                yes_b, no_b, _ = kalshi.fetch_books(client, pos["market_id"])
+                book = yes_b if pos["side"] == "YES" else no_b
+            else:
+                book = clob.fetch_book(client, pos["token_id"]) if pos["token_id"] else None
         except Exception:
             continue
         if book is None or book.age_seconds() > settings.staleness.market_max_age_seconds:
@@ -514,12 +557,13 @@ def _evaluate_exits(conn, cycle_id, client, settings: Settings, executor,
                 market_id=pos["market_id"], token_id=pos["token_id"], side=pos["side"],
                 price=sell.avg_price, shares=pos["shares"], cost_basis_usd=pos["cost_usd"],
                 reason=f"edge_flip fair={fair_side:.3f} sell={sell.avg_price:.3f}",
+                venue=venue,
             )
             outcome = executor.close(intent, cycle_id)
             if outcome.ok:
                 exits += 1
                 d = Decision(pos["market_id"], f"[exit] {pos['market_id']}", "exit",
-                             fair_prob=fv.probability, exec_price=sell.avg_price,
+                             venue=venue, fair_prob=fv.probability, exec_price=sell.avg_price,
                              side=pos["side"], claim=claim)
                 report.decisions.append(d)
                 _record(conn, cycle_id, d)

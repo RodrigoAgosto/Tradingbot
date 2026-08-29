@@ -13,7 +13,7 @@ import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -137,6 +137,11 @@ MIGRATIONS: dict[int, str] = {
         key TEXT PRIMARY KEY,
         value TEXT
     );
+    """,
+    2: """
+    ALTER TABLE positions ADD COLUMN venue TEXT NOT NULL DEFAULT 'polymarket';
+    ALTER TABLE orders ADD COLUMN venue TEXT NOT NULL DEFAULT 'polymarket';
+    ALTER TABLE evaluations ADD COLUMN venue TEXT NOT NULL DEFAULT 'polymarket';
     """,
 }
 
@@ -264,8 +269,8 @@ def record_evaluation(conn: sqlite3.Connection, cycle_id: int, ev: dict) -> None
         """INSERT INTO evaluations
            (cycle_id, market_id, question, claim_json, fair_prob, confidence,
             market_price, exec_price, side, edge, lead_days, volume_24h,
-            decision, skip_reason, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            decision, skip_reason, created_at, venue)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             cycle_id,
             ev.get("market_id"),
@@ -282,6 +287,7 @@ def record_evaluation(conn: sqlite3.Connection, cycle_id: int, ev: dict) -> None
             ev["decision"],
             ev.get("skip_reason"),
             utcnow(),
+            ev.get("venue", "polymarket"),
         ),
     )
     conn.commit()
@@ -293,8 +299,8 @@ def record_order(conn: sqlite3.Connection, cycle_id: int | None, order: dict) ->
     cur = conn.execute(
         """INSERT INTO orders
            (cycle_id, market_id, token_id, side, action, price, shares,
-            cost_usd, mode, status, detail, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            cost_usd, mode, status, detail, created_at, venue)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             cycle_id,
             order["market_id"],
@@ -308,6 +314,7 @@ def record_order(conn: sqlite3.Connection, cycle_id: int | None, order: dict) ->
             order["status"],
             order.get("detail"),
             utcnow(),
+            order.get("venue", "polymarket"),
         ),
     )
     conn.commit()
@@ -318,8 +325,8 @@ def open_position(conn: sqlite3.Connection, pos: dict) -> None:
     conn.execute(
         """INSERT INTO positions
            (market_id, token_id, city, station_id, side, shares, avg_price,
-            cost_usd, claim_json, resolution_date, opened_at, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')""",
+            cost_usd, claim_json, resolution_date, opened_at, status, venue)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)""",
         (
             pos["market_id"],
             pos.get("token_id"),
@@ -332,6 +339,7 @@ def open_position(conn: sqlite3.Connection, pos: dict) -> None:
             pos.get("claim_json"),
             pos.get("resolution_date"),
             utcnow(),
+            pos.get("venue", "polymarket"),
         ),
     )
     conn.commit()

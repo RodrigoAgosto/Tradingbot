@@ -29,7 +29,8 @@ class StrategyConfig(BaseModel):
     min_confidence: float = 0.6
     max_lead_days: int = 3
     max_slippage: float = 0.02
-    min_volume_24h_usd: float = 5000.0
+    min_volume_24h_usd: float = 5000.0     # polymarket: 24h traded volume
+    kalshi_min_book_usd: float = 1000.0    # kalshi: resting book notional
     kelly_multiplier: float = 0.25
     exit_edge: float = 0.10
 
@@ -88,6 +89,7 @@ class AlertsConfig(BaseModel):
 # source). The full supported station universe lives in forecast/stations.py;
 # this list only gates which of them the bot will trade.
 DEFAULT_CITIES = [
+    "Philadelphia",                    # UTC-4 (Kalshi)
     "Los Angeles", "San Francisco",   # UTC-7
     "Denver",                          # UTC-6 (only listed city)
     "Dallas", "Houston",               # UTC-5
@@ -106,6 +108,9 @@ class Settings(BaseModel):
     mode: Literal["paper", "live"] = PAPER
     db_path: str = "weatherbot.db"
     cities: list[str] = Field(default_factory=lambda: list(DEFAULT_CITIES))
+    # Market venues to evaluate. "polymarket" (global, crypto, paper-only for
+    # US residents) and "kalshi" (CFTC-regulated US exchange).
+    venues: list[str] = Field(default_factory=lambda: ["polymarket", "kalshi"])
     strategy: StrategyConfig = Field(default_factory=StrategyConfig)
     risk: RiskConfig = Field(default_factory=RiskConfig)
     staleness: StalenessConfig = Field(default_factory=StalenessConfig)

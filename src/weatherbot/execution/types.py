@@ -17,6 +17,7 @@ class OrderIntent:
     station_id: str | None = None
     claim_json: str | None = None
     resolution_date: str | None = None
+    venue: str = "polymarket"
 
     def as_order_row(self, mode: str, status: str, detail: str | None = None) -> dict:
         return {
@@ -30,6 +31,7 @@ class OrderIntent:
             "mode": mode,
             "status": status,
             "detail": detail,
+            "venue": self.venue,
         }
 
 
@@ -42,6 +44,7 @@ class CloseIntent:
     shares: float
     cost_basis_usd: float
     reason: str = "edge_flip"
+    venue: str = "polymarket"
 
 
 @dataclass

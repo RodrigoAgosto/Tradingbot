@@ -47,6 +47,7 @@ class PaperExecutor:
                 "cost_usd": intent.cost_usd,
                 "claim_json": intent.claim_json,
                 "resolution_date": intent.resolution_date,
+                "venue": intent.venue,
             },
         )
         db.set_paper_bankroll(self.conn, bankroll - intent.cost_usd)
@@ -72,6 +73,7 @@ class PaperExecutor:
                 "mode": self.mode,
                 "status": "filled",
                 "detail": intent.reason,
+                "venue": intent.venue,
             },
         )
         pnl = proceeds - intent.cost_basis_usd

@@ -116,6 +116,35 @@ STATIONS: dict[str, Station] = {
         timezone="America/Chicago",
         source="nws",
     ),
+    # --- Kalshi-only US stations (Kalshi resolves NYC at Central Park and
+    # Chicago at Midway — different stations than Polymarket's LGA/ORD) ---
+    "KNYC": Station(
+        station_id="KNYC",
+        city="New York",
+        name="New York Central Park",
+        lat=40.7789,
+        lon=-73.9692,
+        timezone="America/New_York",
+        source="nws",
+    ),
+    "KMDW": Station(
+        station_id="KMDW",
+        city="Chicago",
+        name="Chicago Midway Airport",
+        lat=41.7842,
+        lon=-87.7553,
+        timezone="America/Chicago",
+        source="nws",
+    ),
+    "KPHL": Station(
+        station_id="KPHL",
+        city="Philadelphia",
+        name="Philadelphia Intl Airport",
+        lat=39.8683,
+        lon=-75.2311,
+        timezone="America/New_York",
+        source="nws",
+    ),
     "KSEA": Station(
         station_id="KSEA",
         city="Seattle",
