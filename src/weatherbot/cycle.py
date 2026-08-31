@@ -489,6 +489,12 @@ def _evaluate_market(conn, cycle_id, client, settings: Settings, target: Target,
     d.side, d.exec_price, d.edge = er.side, er.exec_price, er.edge
     d.market_price = er.market_implied_yes
 
+    if claim.city in settings.watch_only_cities:
+        # fully evaluated (fair value, edge, calibration snapshot recorded)
+        # but never traded — the station is on probation
+        d.skip_reason = f"city_watch_only:{claim.city}"
+        return d
+
     ctx = rules.EntryContext(
         edge_result=er,
         confidence=fv.confidence,

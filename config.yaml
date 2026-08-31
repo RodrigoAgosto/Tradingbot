@@ -16,6 +16,13 @@ venues:
   - "polymarket"
   - "kalshi"
 
+# Evaluated every cycle (model keeps learning + being scored) but never
+# traded. Wellington: every settled trade there has lost and the model
+# repeatedly disagrees with the market by 50c+; benched until its
+# calibration record justifies promotion.
+watch_only_cities:
+  - "Wellington"
+
 # Cities the bot will trade, across all venues. Kalshi adds Philadelphia,
 # Chicago (Midway), Miami, Austin, Seattle, San Francisco as tradeable
 # cities; enable any of them here. Not supportable on Polymarket (resolve

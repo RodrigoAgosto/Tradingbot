@@ -111,6 +111,10 @@ class Settings(BaseModel):
     # Market venues to evaluate. "polymarket" (global, crypto, paper-only for
     # US residents) and "kalshi" (CFTC-regulated US exchange).
     venues: list[str] = Field(default_factory=lambda: ["polymarket", "kalshi"])
+    # Cities evaluated every cycle (calibration + Brier record keep building)
+    # but NEVER traded — for stations where the model is demonstrably
+    # miscalibrated. Promote back to trading once the record earns it.
+    watch_only_cities: list[str] = Field(default_factory=lambda: ["Wellington"])
     strategy: StrategyConfig = Field(default_factory=StrategyConfig)
     risk: RiskConfig = Field(default_factory=RiskConfig)
     staleness: StalenessConfig = Field(default_factory=StalenessConfig)

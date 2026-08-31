@@ -85,3 +85,11 @@ def test_kalshi_liquidity_gate_uses_venue_floor():
         EntryContext(**base, volume_24h=2000.0), cfg)
     assert entry_skip_reason(
         EntryContext(**base, volume_24h=2000.0, min_volume=cfg.kalshi_min_book_usd), cfg) is None
+
+
+def test_watch_only_city_config():
+    from weatherbot.config import Settings
+
+    s = Settings()
+    assert "Wellington" in s.watch_only_cities
+    assert "Wellington" in s.cities  # still evaluated, just never traded
